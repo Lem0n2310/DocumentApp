@@ -68,12 +68,18 @@ fun MyTopAppBar(title: String, screenToNavigate: Screen, imageVector: ImageVecto
 @Composable
 fun TemplatePicker() { // Получаем список шаблонов и нав
     val manager = Manager<DocumentTemplate>(DocumentTemplate::class.java)
-    val templates by remember { mutableStateOf(manager.loadJson())}
-    val isHover = remember { mutableStateMapOf<DocumentTemplate, Boolean>().apply {
-        templates.forEach { documentTemplate -> this[documentTemplate] = false }
-    } }
+    // Делаем список шаблонов реактивным, чтобы UI обновлялся при удалении
+    val templates = remember {
+        mutableStateListOf<DocumentTemplate>().apply {
+            addAll(manager.loadJson())
+        }
+    }
+    val isHover = remember {
+        mutableStateMapOf<DocumentTemplate, Boolean>().apply {
+            templates.forEach { documentTemplate -> this[documentTemplate] = false }
+        }
+    }
     val backgroundColor = remember { Color(0xff9DA7E8) }
-    var recompose by mutableStateOf(0)
     val templateFolder by remember { mutableStateOf(File(System.getProperty("user.home"),"DocumentEditor/Templates")) }
 
     Box(
@@ -86,7 +92,8 @@ fun TemplatePicker() { // Получаем список шаблонов и на
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(top = 40.dp)
         ) {
-            item {// Перебираем все шаблоны из templates и под каждого создаем свою кнопку
+            item {
+                // Перебираем все шаблоны из templates и под каждого создаем свою кнопку
                 templates.forEach { template ->
                     Button(onClick = {
                         Navigation.navigateTo(Screen.TemplateInputRoute(templateId = template.id, nameForDev = template.nameForDevelop))
@@ -110,7 +117,9 @@ fun TemplatePicker() { // Получаем список шаблонов и на
                                     val file = File(templateFolder, "${template.nameForDevelop}.docx")
                                     file.delete()
                                     manager.deleteDocument(id = template.id)
-                                    recompose += 1
+                                    // Удаляем шаблон из локального списка, чтобы кнопка пропала с экрана
+                                    templates.remove(template)
+                                    isHover.remove(template)
                                 },
                                 modifier = Modifier.onPointerEvent(PointerEventType.Enter){isHover[template] = true}
                                     .onPointerEvent(PointerEventType.Exit){isHover[template] = false},
