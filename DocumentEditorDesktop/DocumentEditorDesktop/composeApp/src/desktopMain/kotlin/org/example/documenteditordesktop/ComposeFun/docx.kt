@@ -573,33 +573,57 @@ fun TemplateEditorScreen(file: File) {
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ),
                 actions = {
-                    IconButton(onClick = {
-                        val nameForDev = nameForUser.transliterateRussian().replaceSpacesWithUnderscores()
-                        val templateFolder = File(System.getProperty("user.home"),"DocumentEditor/Templates")
-                        val templateFile = File(templateFolder, "${nameForDev}.docx")
-                        val docFields = mutableListOf<DocumentField>()
-                        val id = if(templates.isNotEmpty()) {
-                            templates.last().id + 1
-                        }else{
-                            0
-                        }
-                        applyTemplateChangesByIndex(
-                            sourceFile = file,
-                            targetFile = templateFile,
-                            fields = fields,
-                        )
-                        fields.keys.forEach {documentField ->
-                            docFields.add(documentField)
-                        }
-                        manager.addDocument(
-                            DocumentTemplate(
-                                id = id,
-                                nameForUser = nameForUser,
-                                nameForDevelop = nameForDev,
-                                fields = docFields
+                    IconButton(
+                        enabled = nameForUser.isNotBlank(),
+                        onClick = {
+                            // Не даём сохранить шаблон без имени
+                            if (nameForUser.isBlank()) return@IconButton
+
+                            val nameForDev = nameForUser.transliterateRussian().replaceSpacesWithUnderscores()
+                            val templateFolder = File(System.getProperty("user.home"),"DocumentEditor/Templates")
+                            val templateFile = File(templateFolder, "${nameForDev}.docx")
+                            val docFields = mutableListOf<DocumentField>()
+
+                            // Гарантируем уникальный id на основе актуального содержимого JSON
+                            val existingTemplates = manager.documents as MutableList<DocumentTemplate>
+                            val existingWithSameDevName = existingTemplates.find { it.nameForDevelop == nameForDev }
+
+                            val id = if (existingWithSameDevName != null) {
+                                // Переиспользуем id, если такой шаблон уже есть
+                                existingWithSameDevName.id
+                            } else {
+                                if (existingTemplates.isNotEmpty()) {
+                                    existingTemplates.maxOf { it.id } + 1
+                                } else {
+                                    0
+                                }
+                            }
+
+                            applyTemplateChangesByIndex(
+                                sourceFile = file,
+                                targetFile = templateFile,
+                                fields = fields,
                             )
-                        )
-                    }) {
+
+                            fields.keys.forEach { documentField ->
+                                docFields.add(documentField)
+                            }
+
+                            // Если шаблон с таким nameForDevelop уже существует — обновляем запись
+                            if (existingWithSameDevName != null) {
+                                existingTemplates.removeIf { it.id == existingWithSameDevName.id }
+                            }
+
+                            manager.addDocument(
+                                DocumentTemplate(
+                                    id = id,
+                                    nameForUser = nameForUser,
+                                    nameForDevelop = nameForDev,
+                                    fields = docFields
+                                )
+                            )
+                        }
+                    ) {
                         Icon(AppIcons.Check, contentDescription = "Сохранить")
                     }
                 }

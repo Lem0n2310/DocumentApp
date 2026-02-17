@@ -145,18 +145,79 @@ fun applyTemplateChangesByIndex(
     fun flushCurrentTextBlockIfAny() {
         if (currentBlockParas.isEmpty()) return
 
-        val reps = replacementsByBlock[idCounter]
-        if (!reps.isNullOrEmpty()) {
-            val original = combineTextBlock(currentBlockParas)
-            val replaced = applyReplacementsToString(original, reps)
+        val repsForBlock = replacementsByBlock[idCounter]
 
-            // Пишем результат в первый параграф блока,
-            // остальные параграфы очищаем (чтобы не потерять структуру body)
-            setParagraphText(currentBlockParas.first(), replaced)
-            for (i in 1 until currentBlockParas.size) {
-                setParagraphText(currentBlockParas[i], "")
+        if (!repsForBlock.isNullOrEmpty()) {
+            // Раскладываем объединённый текст по абзацам так же,
+            // как это делал parseDocxFile: каждый непустой параграф
+            // даёт свой текст, пустой — один символ переноса строки.
+            data class ParagraphSegment(
+                val paragraph: XWPFParagraph,
+                val rangeStart: Int,
+                val rangeEnd: Int,
+                val isBlank: Boolean
+            )
+
+            val segments = mutableListOf<ParagraphSegment>()
+            var cursor = 0
+
+            currentBlockParas.forEach { p ->
+                val t = p.text ?: ""
+                if (t.isNotBlank()) {
+                    val start = cursor
+                    val end = start + t.length
+                    segments.add(
+                        ParagraphSegment(
+                            paragraph = p,
+                            rangeStart = start,
+                            rangeEnd = end,
+                            isBlank = false
+                        )
+                    )
+                    cursor = end
+                } else {
+                    // пустой параграф представлен как "\n"
+                    val start = cursor
+                    val end = start + 1
+                    segments.add(
+                        ParagraphSegment(
+                            paragraph = p,
+                            rangeStart = start,
+                            rangeEnd = end,
+                            isBlank = true
+                        )
+                    )
+                    cursor = end
+                }
+            }
+
+            // Для каждого абзаца собираем только те замены,
+            // которые полностью попадают в его диапазон.
+            segments.forEach { segment ->
+                if (segment.isBlank) return@forEach
+
+                val paraText = segment.paragraph.text ?: ""
+                if (paraText.isEmpty()) return@forEach
+
+                val localReps = repsForBlock
+                    .filter { r ->
+                        r.start >= segment.rangeStart && r.end <= segment.rangeEnd
+                    }
+                    .map { r ->
+                        val localStart = (r.start - segment.rangeStart).coerceIn(0, paraText.length)
+                        val localEnd = (r.end - segment.rangeStart).coerceIn(localStart, paraText.length)
+                        Replacement(localStart, localEnd, r.key)
+                    }
+
+                if (localReps.isNotEmpty()) {
+                    val updated = applyReplacementsToString(paraText, localReps)
+                    // Переписываем текст только этого параграфа,
+                    // сохраняя общее количество абзацев и пустые строки.
+                    setParagraphText(segment.paragraph, updated)
+                }
             }
         }
+
         // Этот TextBlock занимает один id
         idCounter++
         currentBlockParas.clear()
