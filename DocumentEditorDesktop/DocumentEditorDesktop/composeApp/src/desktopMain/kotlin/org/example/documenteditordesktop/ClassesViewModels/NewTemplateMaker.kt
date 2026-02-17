@@ -82,19 +82,6 @@ fun applyTemplateChangesByIndex(
     var idCounter = 0
     val currentBlockParas = mutableListOf<XWPFParagraph>()
 
-    fun combineTextBlock(paragraphs: List<XWPFParagraph>): String {
-        val sb = StringBuilder()
-        paragraphs.forEach { p ->
-            val t = p.text ?: ""
-            if (t.isNotBlank()) {
-                sb.append(t)
-            } else {
-                // как в твоём парсере: пустой параграф — это перенос строки
-                sb.append("\n")
-            }
-        }
-        return sb.toString()
-    }
 
     fun applyReplacementsToString(text: String, reps: List<Replacement>): String {
         var result = text
@@ -139,6 +126,69 @@ fun applyTemplateChangesByIndex(
         parts.forEach { part ->
             val p = cell.addParagraph()
             setParagraphText(p, part)
+        }
+    }
+
+    /**
+     * Применяет замены к параграфу, стараясь максимально сохранить
+     * структуру и стили run‑ов.
+     *
+     * @param paragraph сам параграф
+     * @param originalText текст параграфа в том же виде, как его видит parseDocxFile (paragraph.text)
+     * @param reps замены в координатах originalText
+     */
+    fun applyReplacementsToParagraphRuns(
+        paragraph: XWPFParagraph,
+        originalText: String,
+        reps: List<Replacement>
+    ) {
+        if (reps.isEmpty()) return
+
+        val runs = paragraph.runs.toList()
+        if (runs.isEmpty()) {
+            // Фоллбек: если run‑ов нет, просто переписываем текст
+            val replaced = applyReplacementsToString(originalText, reps)
+            setParagraphText(paragraph, replaced)
+            return
+        }
+
+        val runTexts = runs.map { it.getText(0) ?: "" }
+        val full = runTexts.joinToString("")
+
+        // Если почему‑то текст из run‑ов не совпадает с paragraph.text,
+        // лучше не рисковать и переписать параграф целиком.
+        if (full.length != originalText.length) {
+            val replaced = applyReplacementsToString(originalText, reps)
+            setParagraphText(paragraph, replaced)
+            return
+        }
+
+        val newFull = applyReplacementsToString(full, reps)
+
+        // Распределяем текст по существующим run‑ам последовательно,
+        // сохраняя их стили. Границы стилей могут немного сдвинуться,
+        // но пробелы и структура текста останутся.
+        var index = 0
+        runs.forEach { run ->
+            val old = run.getText(0) ?: ""
+            val oldLen = old.length
+            val end = (index + oldLen).coerceAtMost(newFull.length)
+            val slice = if (index < newFull.length) newFull.substring(index, end) else ""
+
+            run.setText("", 0)
+            if (slice.isNotEmpty()) {
+                run.setText(slice, 0)
+            }
+
+            index = end
+        }
+
+        // Если новый текст длиннее суммы длин run‑ов, допишем хвост в последний run
+        if (index < newFull.length && runs.isNotEmpty()) {
+            val last = runs.last()
+            val tail = newFull.substring(index)
+            val current = last.getText(0) ?: ""
+            last.setText(current + tail, 0)
         }
     }
 
@@ -219,69 +269,6 @@ fun applyTemplateChangesByIndex(
         // Этот TextBlock занимает один id
         idCounter++
         currentBlockParas.clear()
-    }
-
-    /**
-     * Применяет замены к параграфу, стараясь максимально сохранить
-     * структуру и стили run‑ов.
-     *
-     * @param paragraph сам параграф
-     * @param originalText текст параграфа в том же виде, как его видит parseDocxFile (paragraph.text)
-     * @param reps замены в координатах originalText
-     */
-    fun applyReplacementsToParagraphRuns(
-        paragraph: XWPFParagraph,
-        originalText: String,
-        reps: List<Replacement>
-    ) {
-        if (reps.isEmpty()) return
-
-        val runs = paragraph.runs.toList()
-        if (runs.isEmpty()) {
-            // Фоллбек: если run‑ов нет, просто переписываем текст
-            val replaced = applyReplacementsToString(originalText, reps)
-            setParagraphText(paragraph, replaced)
-            return
-        }
-
-        val runTexts = runs.map { it.getText(0) ?: "" }
-        val full = runTexts.joinToString("")
-
-        // Если почему‑то текст из run‑ов не совпадает с paragraph.text,
-        // лучше не рисковать и переписать параграф целиком.
-        if (full.length != originalText.length) {
-            val replaced = applyReplacementsToString(originalText, reps)
-            setParagraphText(paragraph, replaced)
-            return
-        }
-
-        val newFull = applyReplacementsToString(full, reps)
-
-        // Распределяем текст по существующим run‑ам последовательно,
-        // сохраняя их стили. Границы стилей могут немного сдвинуться,
-        // но пробелы и структура текста останутся.
-        var index = 0
-        runs.forEach { run ->
-            val old = run.getText(0) ?: ""
-            val oldLen = old.length
-            val end = (index + oldLen).coerceAtMost(newFull.length)
-            val slice = if (index < newFull.length) newFull.substring(index, end) else ""
-
-            run.setText("", 0)
-            if (slice.isNotEmpty()) {
-                run.setText(slice, 0)
-            }
-
-            index = end
-        }
-
-        // Если новый текст длиннее суммы длин run‑ов, допишем хвост в последний run
-        if (index < newFull.length && runs.isNotEmpty()) {
-            val last = runs.last()
-            val tail = newFull.substring(index)
-            val current = last.getText(0) ?: ""
-            last.setText(current + tail, 0)
-        }
     }
 
     // основной проход
