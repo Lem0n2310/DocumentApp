@@ -8,28 +8,48 @@ import java.io.File
 
 @Serializable
 class RecentDocument(
-    val path: String,
-    val dict: Map<String, String>,
-    val name: String,
-    val templateId: Int,
-    val nameForDev: String
-)
+    var path: String,
+    var dict: Map<String, String>,
+    var name: String,
+    var templateId: Int,
+    var nameForDev: String
+) {
+    constructor() : this(
+        path = "",
+        dict = emptyMap(),
+        name = "",
+        templateId = 0,
+        nameForDev = ""
+    )
+}
 
 // Класс описывающий поле
 @Serializable
-data class DocumentField (
-    val label: String, // Название поля
-    val key: String = ""
-)
+data class DocumentField(
+    var label: String, // Название поля
+    var key: String = ""
+) {
+    constructor() : this(
+        label = "",
+        key = ""
+    )
+}
 
 // Класс описывающий шаблон документа
 @Serializable
 data class DocumentTemplate(
-    val id: Int, // Номер шаблона
-    val nameForUser: String, // Имя шаблона
-    val nameForDevelop: String,
-    val fields: List<DocumentField> // Поля шаблона
-)
+    var id: Int, // Номер шаблона
+    var nameForUser: String, // Имя шаблона
+    var nameForDevelop: String,
+    var fields: List<DocumentField> // Поля шаблона
+) {
+    constructor() : this(
+        id = 0,
+        nameForUser = "",
+        nameForDevelop = "",
+        fields = emptyList()
+    )
+}
 
 class Manager<T: Any>(
     val documentType: Class<T>
