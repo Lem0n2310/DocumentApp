@@ -76,7 +76,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Exe, TargetFormat.Msi)
             packageName = "DocumentEditor"
-            packageVersion = "1.0.0"
+            packageVersion = "1.0.2"
 
             windows{
                 dirChooser = false
