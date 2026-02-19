@@ -1,11 +1,14 @@
 package org.example.documenteditordesktop.ClassesViewModels
 
-import com.example.documenteditor.ComposeFun.MainScreen
+
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import org.apache.poi.xwpf.usermodel.XWPFTable
 import java.io.File
 
+
+/**
+ * Все экраны, используемые в приложении
+ */
 sealed class Screen {
     object MainScreenRoute : Screen()
     object SettingsScreenRoute: Screen()

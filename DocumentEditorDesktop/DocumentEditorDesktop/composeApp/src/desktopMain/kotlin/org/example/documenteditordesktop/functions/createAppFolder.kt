@@ -3,6 +3,11 @@ package org.example.documenteditordesktop.functions
 import java.nio.file.Files
 import java.nio.file.Paths
 
+/**
+ * Проверка существования папки приложения.
+ * @param relativePath Путь от папки user.home
+ * @return Существует папка или нет
+ */
 fun checkFolderExists(relativePath: String): Boolean {
     val userHome = System.getProperty("user.home")
     val fullPath = Paths.get(userHome, *relativePath.split("/").toTypedArray())
@@ -10,6 +15,10 @@ fun checkFolderExists(relativePath: String): Boolean {
     return Files.exists(fullPath) && Files.isDirectory(fullPath)
 }
 
+/**
+ * Создание папки
+ * @param relativePath пути до папки от user.home
+ */
 fun createFolder(relativePath: String): Boolean {
     val userHome = System.getProperty("user.home")
     val fullPath = Paths.get(userHome, *relativePath.split("/").toTypedArray())

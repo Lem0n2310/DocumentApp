@@ -3,9 +3,6 @@ package org.example.documenteditordesktop
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import com.example.documenteditor.ClassesViewModels.templates
@@ -19,9 +16,6 @@ import org.example.documenteditordesktop.ComposeFun.TemplateInput
 import org.example.documenteditordesktop.ComposeFunpackage.RecentDocs
 import org.example.documenteditordesktop.functions.checkFolderExists
 import org.example.documenteditordesktop.functions.createFolder
-import java.io.BufferedReader
-import java.io.File
-import java.io.InputStreamReader
 
 fun main() = application {
     Window(
@@ -29,7 +23,7 @@ fun main() = application {
         title = "documenteditordesktop",
     ) {
         LaunchedEffect(Unit) {
-            // Создаем необходимые папки
+            // При старте создаем необходимые папки
             val baseFolder = "DocumentEditor"
             if (!checkFolderExists(baseFolder)) {
                 createFolder(baseFolder)
@@ -44,12 +38,10 @@ fun main() = application {
                 if (!checkFolderExists("$baseFolder/Templates")) {
                     createFolder("$baseFolder/Templates")
                 }
-                println("Папки уже существуют")
             }
         }
-
+        // текущий экран
         val currentScreen by Navigation.currentScreen.collectAsState()
-        var selectedFile by remember { mutableStateOf<File?>(null) }
 
         when (currentScreen) {
             is Screen.MainScreenRoute -> MainScreen()
