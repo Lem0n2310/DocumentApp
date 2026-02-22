@@ -8,11 +8,10 @@ import org.apache.poi.xwpf.usermodel.XWPFTableCell
 /**
  * Изменение текста в файле БЕЗ потери стилей.
  *
- * Раньше мы брали paragraph.text, делали replace и пересоздавали один run —
- * так терялись все run‑стили (жирный, курсив, шрифт и т.п.).
- *
- * Теперь проходимся по каждому run и меняем текст только внутри него,
- * сохраняя форматирование run.
+ * Замены выполняются на уровне параграфа: текст всех run'ов объединяется,
+ * затем применяются замены (так плейсхолдеры вроде {{name}} заменяются даже
+ * когда разбиты на несколько run'ов в DOCX). Результат распределяется обратно
+ * по run'ам с сохранением форматирования.
  */
 fun textChange(document: XWPFDocument, replace: Map<String, String>) {
     document.paragraphs.forEach { paragraph ->
@@ -38,26 +37,46 @@ fun tableChange(document: XWPFDocument, replace: Map<String, String>) {
     }
 }
 
+/**
+ * Заменяет плейсхолдеры в параграфе. Текст всех run'ов объединяется в одну строку,
+ * затем применяются все замены — так заменяются фразы, разбитые на несколько run'ов
+ * (типично для DOCX). Результат записывается обратно в run'ы с сохранением стилей.
+ */
 private fun applyReplaceInParagraph(
     paragraph: XWPFParagraph,
     replace: Map<String, String>
 ) {
-    if (paragraph.runs.isEmpty()) return
+    if (replace.isEmpty()) return
+    val runs = paragraph.runs
+    if (runs.isEmpty()) return
 
-    paragraph.runs.forEach { run ->
-        val originalText = run.getText(0) ?: return@forEach
-        var updatedText: String? = null
+    val runTexts = runs.map { it.getText(0) ?: "" }
+    var fullText = runTexts.joinToString("")
 
-        replace.forEach { (oldWord, newWord) ->
-            if (originalText.contains(oldWord)) {
-                updatedText = (updatedText ?: originalText).replace(oldWord, newWord)
-            }
+    replace.forEach { (oldWord, newWord) ->
+        fullText = fullText.replace(oldWord, newWord)
+    }
+    val newFullText = fullText
+    if (newFullText == runTexts.joinToString("")) return
+
+    // Распределяем новый текст по run'ам по длинам старых run'ов (сохраняем стили)
+    var index = 0
+    runs.forEach { run ->
+        val oldLen = (run.getText(0) ?: "").length
+        val end = (index + oldLen).coerceAtMost(newFullText.length)
+        val slice = if (index < newFullText.length) newFullText.substring(index, end) else ""
+        run.setText("", 0)
+        if (slice.isNotEmpty()) {
+            run.setText(slice, 0)
         }
-
-        // Если были изменения — записываем новый текст, но НЕ трогаем стили run
-        updatedText?.let { newText ->
-            run.setText(newText, 0)
-        }
+        index = end
+    }
+    // Если новый текст длиннее — дописываем в последний run
+    if (index < newFullText.length && runs.isNotEmpty()) {
+        val last = runs.last()
+        val tail = newFullText.substring(index)
+        val current = last.getText(0) ?: ""
+        last.setText(current + tail, 0)
     }
 }
 
