@@ -21,15 +21,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.documenteditor.ClassesViewModels.SaveViewModel
-import org.apache.poi.xwpf.usermodel.XWPFDocument
-import org.apache.poi.xwpf.usermodel.XWPFTable
 import org.example.documenteditordesktop.ClassesViewModels.AppIcons
 import org.example.documenteditordesktop.ClassesViewModels.Navigation
 import org.example.documenteditordesktop.ClassesViewModels.Screen
-import org.example.documenteditordesktop.functions.checkFolderExists
-import org.example.documenteditordesktop.functions.createFolder
+import org.example.documenteditordesktop.functions.convertDocToDocx
 import java.io.File
-import java.io.FileInputStream
 
 @Composable
 fun MainScreen() {
@@ -75,16 +71,19 @@ fun MainScreen() {
                     onClick = {
                         saveViewModel.showOpenDialog(
                             onFileSelected = { currentFile ->
-                                file = currentFile
+                                val resultFile = if (currentFile.extension.equals("doc", ignoreCase = true)) {
+                                    convertDocToDocx(currentFile)
+                                } else {
+                                    currentFile
+                                }
+                                file = resultFile
                                 openCreateTemplate = true
+                                Navigation.navigateTo(Screen.NewTemplateScreenRoute(resultFile))
                             },
                             onCancel = {
                                 println("Открытие файла отменено")
                             }
                         )
-                        if (openCreateTemplate) {
-                            file?.let { Navigation.navigateTo(Screen.NewTemplateScreenRoute(it)) }
-                        }
                     },
                     colors = ButtonDefaults.buttonColors(
                         contentColor = Color.Black,

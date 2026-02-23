@@ -27,9 +27,10 @@ class SaveViewModel {
     ) {
         // Использование AWT FileDialog (более нативный вид)
         val dialog = FileDialog(null as Frame?, "Открыть файл", FileDialog.LOAD).apply {
-            // Устанавливаем фильтр для DOCX файлов
+            // Фильтр для DOC и DOCX файлов
             filenameFilter = FilenameFilter { _, name ->
-                name.endsWith(".docx", ignoreCase = true)
+                name.endsWith(".docx", ignoreCase = true) ||
+                        name.endsWith(".doc", ignoreCase = true)
             }
             isVisible = true
         }
