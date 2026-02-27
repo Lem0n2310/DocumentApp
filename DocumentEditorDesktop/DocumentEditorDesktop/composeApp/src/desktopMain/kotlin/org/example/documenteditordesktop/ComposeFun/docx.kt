@@ -421,11 +421,10 @@ fun RightSide(
         }
         LazyColumn(
             modifier = Modifier
-                //.weight(0.3f)
                 .padding(8.dp)
-                .padding(top = 40.dp)
-                .fillMaxHeight(),
-            verticalArrangement = Arrangement.Top
+                .padding(top = 40.dp),
+            verticalArrangement = Arrangement.Top,
+            contentPadding = PaddingValues(bottom = 80.dp)
         ) {
             if (editorFlag) {
                 // поле подсказки (пока без изменения текста)

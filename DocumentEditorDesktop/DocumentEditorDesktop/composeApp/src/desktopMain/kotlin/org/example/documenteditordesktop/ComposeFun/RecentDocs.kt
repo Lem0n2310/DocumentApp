@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import org.example.documenteditordesktop.ClassesViewModels.Manager
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.TextButton
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,13 +45,25 @@ import java.io.File
 fun RecentDocs(){
     val manager = remember { Manager<RecentDocument>(RecentDocument::class.java) }
     var recentDocs by remember { mutableStateOf(manager.loadJson()) }
-    val isHover: MutableMap<RecentDocument, Boolean> = remember { mutableStateMapOf<RecentDocument, Boolean>().apply {
-        recentDocs.forEach { document -> this[document] = false }
-    } }
+    val isHover: MutableMap<RecentDocument, Boolean> = remember {
+        mutableStateMapOf<RecentDocument, Boolean>().apply {
+            recentDocs.forEach { document -> this[document] = false }
+        }
+    }
 
-    val showOpenVarianse: MutableMap<RecentDocument, Boolean> = remember { mutableStateMapOf<RecentDocument, Boolean>().apply {
-        recentDocs.forEach { document -> this[document] = false }
-    } }
+    val showOpenVarianse: MutableMap<RecentDocument, Boolean> = remember {
+        mutableStateMapOf<RecentDocument, Boolean>().apply {
+            recentDocs.forEach { document -> this[document] = false }
+        }
+    }
+
+    // Режим удаления (как на iOS)
+    var isDeleteMode by remember { mutableStateOf(false) }
+    val selectedDocs: MutableMap<RecentDocument, Boolean> = remember {
+        mutableStateMapOf<RecentDocument, Boolean>().apply {
+            recentDocs.forEach { document -> this[document] = false }
+        }
+    }
 
 
     Box(modifier = Modifier.fillMaxSize()){
@@ -69,32 +83,37 @@ fun RecentDocs(){
                 item {
                     recentDocs.forEach { document ->
                         Column{
-                            Button(
-                                onClick = { showOpenVarianse[document]?.let { showOpenVarianse[document] = !it } },
-                                modifier = Modifier
-                                    .padding(vertical = 10.dp)
-                                    .width(400.dp)
-                                    .height(50.dp)
-                                    .onPointerEvent(PointerEventType.Enter){isHover[document] = true}
-                                    .onPointerEvent(PointerEventType.Exit){isHover[document] = false},
-                            ) {
-                                Text(document.name)
+                            Row {
+                                if (isDeleteMode) {
+                                    Checkbox(
+                                        checked = selectedDocs[document] == true,
+                                        onCheckedChange = { checked ->
+                                            selectedDocs[document] = checked
+                                        }
+                                    )
+                                }
 
-                                if(isHover[document] == true){
-                                    TextButton(
-                                        onClick = {
-                                            manager.deleteDocument(document.name)
-                                            recentDocs = manager.loadJson()
-                                        },
-                                        modifier = Modifier.onPointerEvent(PointerEventType.Enter){isHover[document] = true}
-                                            .onPointerEvent(PointerEventType.Exit){isHover[document] = false},
-                                    ){
-                                        Text("delete")
-                                    }
+                                Button(
+                                    onClick = {
+                                        if (!isDeleteMode) {
+                                            showOpenVarianse[document]?.let {
+                                                showOpenVarianse[document] = !it
+                                            }
+                                        }
+                                    },
+                                    enabled = !isDeleteMode,
+                                    modifier = Modifier
+                                        .padding(vertical = 10.dp)
+                                        .width(400.dp)
+                                        .height(50.dp)
+                                        .onPointerEvent(PointerEventType.Enter){isHover[document] = true}
+                                        .onPointerEvent(PointerEventType.Exit){isHover[document] = false},
+                                ) {
+                                    Text(document.name)
                                 }
                             }
 
-                            if(showOpenVarianse[document] == true){
+                            if(showOpenVarianse[document] == true && !isDeleteMode){
                                 Column{
                                     TextButton(
                                         onClick = {
@@ -130,7 +149,7 @@ fun RecentDocs(){
     }
 
     TopAppBar(
-        title = { Text("Настройки") },
+        title = { Text("Недавние документы") },
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = Color(0xff8192fe),
             titleContentColor =  Color.White,
@@ -146,13 +165,30 @@ fun RecentDocs(){
             }
         },
         actions = {
-            TextButton(
-                onClick = {
-                    manager.clear()
+            if (isDeleteMode) {
+                TextButton(onClick = {
+                    // Отмена режима удаления
+                    isDeleteMode = false
+                    selectedDocs.keys.forEach { selectedDocs[it] = false }
+                }) {
+                    Text("Отмена")
+                }
+                TextButton(onClick = {
+                    // Подтверждение удаления выбранных
+                    val toDelete = selectedDocs.filterValues { it }.keys.toList()
+                    toDelete.forEach { document ->
+                        manager.deleteDocument(document.name)
+                    }
                     recentDocs = manager.loadJson()
-                },
-            ) {
-                Text("delete all")
+                    selectedDocs.clear()
+                    isDeleteMode = false
+                }) {
+                    Text("Удалить")
+                }
+            } else {
+                TextButton(onClick = { isDeleteMode = true }) {
+                    Text("Удалить")
+                }
             }
         }
     )

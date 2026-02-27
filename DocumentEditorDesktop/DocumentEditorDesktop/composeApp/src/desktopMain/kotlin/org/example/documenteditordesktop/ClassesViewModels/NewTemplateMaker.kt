@@ -3,6 +3,7 @@ package org.example.documenteditordesktop.ClassesViewModels
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import org.apache.poi.xwpf.usermodel.*
 import java.io.File
+import kotlin.math.abs
 
 // Внутренний holder для замены
 private data class Replacement(val start: Int, val end: Int, val key: String)
@@ -26,6 +27,9 @@ fun applyTemplateChangesByIndex(
 ) {
     val doc = XWPFDocument(sourceFile.inputStream())
 
+    // Карта цветов для каждого ключа плейсхолдера ({{KEY}})
+    val keyColors: MutableMap<String, String> = mutableMapOf()
+
     // ----- 1) Собираем замены -----
 
     // TextBlock: id -> список Replacement(start, end, key)
@@ -42,6 +46,11 @@ fun applyTemplateChangesByIndex(
             (k.get(documentField) as? String) ?: continue
         } catch (_: Exception) {
             continue
+        }
+
+        // Назначаем детерминированный цвет для каждого поля
+        if (!keyColors.containsKey(keyString)) {
+            keyColors[keyString] = colorForKey(keyString)
         }
 
         for ((k, _) in frags) {
@@ -321,9 +330,64 @@ fun applyTemplateChangesByIndex(
     // в конце может остаться хвостовой TextBlock
     flushCurrentTextBlockIfAny()
 
-    // ----- 3) Сохраняем в целевой файл -----
+    // ----- 3) Подсвечиваем все плейсхолдеры по их ключам -----
+    applyColorsToPlaceholders(doc, keyColors)
+
+    // ----- 4) Сохраняем в целевой файл -----
     targetFile.outputStream().use { out ->
         doc.write(out)
     }
     doc.close()
+}
+
+// Небольшая палитра цветов для разных полей
+private fun colorForKey(key: String): String {
+    val palette = listOf(
+        "FF0000", // красный
+        "007AFF", // синий
+        "34C759", // зелёный
+        "FF9500", // оранжевый
+        "AF52DE", // фиолетовый
+        "FF2D55", // розовый
+        "5AC8FA", // голубой
+        "8E8E93"  // серый
+    )
+    val index = abs(key.hashCode()) % palette.size
+    return palette[index]
+}
+
+// Проходим по документу и подсвечиваем все run'ы, содержащие плейсхолдер
+private fun applyColorsToPlaceholders(
+    doc: XWPFDocument,
+    keyColors: Map<String, String>
+) {
+    if (keyColors.isEmpty()) return
+
+    fun colorRuns(paragraph: XWPFParagraph) {
+        paragraph.runs?.forEach { run ->
+            val text = run.getText(0) ?: return@forEach
+            for ((key, color) in keyColors) {
+                if (text.contains(key)) {
+                    run.color = color
+                    break
+                }
+            }
+        }
+    }
+
+    // Параграфы вне таблиц
+    doc.paragraphs.forEach { paragraph ->
+        colorRuns(paragraph)
+    }
+
+    // Параграфы внутри таблиц
+    doc.tables.forEach { table ->
+        table.rows.forEach { row ->
+            row.tableCells.forEach { cell ->
+                cell.paragraphs.forEach { paragraph ->
+                    colorRuns(paragraph)
+                }
+            }
+        }
+    }
 }
