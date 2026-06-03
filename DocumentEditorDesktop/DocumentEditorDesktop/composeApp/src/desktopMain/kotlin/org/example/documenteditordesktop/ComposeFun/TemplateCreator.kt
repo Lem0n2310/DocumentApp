@@ -20,7 +20,6 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
-import com.example.documenteditor.ClassesViewModels.templates
 import org.apache.poi.xwpf.usermodel.*
 import org.example.documenteditordesktop.ClassesViewModels.AppIcons
 import org.example.documenteditordesktop.ClassesViewModels.Navigation
@@ -622,6 +621,8 @@ fun TemplateEditorScreen(file: File) {
                                     fields = docFields
                                 )
                             )
+
+                            Navigation.navigateTo(Screen.MainScreenRoute)
                         }
                     ) {
                         Icon(AppIcons.Check, contentDescription = "Сохранить")

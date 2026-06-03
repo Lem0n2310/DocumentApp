@@ -27,6 +27,8 @@ object AppIcons {
     val PlusImage: ImageVector
         get() = _add
 
+    val DeleteImage: ImageVector
+        get() = _delete
     private val _arrowBack: ImageVector = Builder(
         name = "ArrowBack",
         defaultWidth = 24.0.dp,
@@ -55,6 +57,59 @@ object AppIcons {
             horizontalLineToRelative(487f)
             verticalLineToRelative(80f)
             horizontalLineTo(313f)
+            close()
+        }
+    }.build()
+
+    private val _delete = Builder(
+    name = "Delete",
+    defaultWidth = 24.dp,
+    defaultHeight = 24.dp,
+    viewportWidth = 960f,
+    viewportHeight = 960f
+    ).apply {
+        path(
+            fill = SolidColor(Color(0xFFe3e3e3))
+        ) {
+            moveTo(280f, 840f)
+            quadToRelative(-33f, 0f, -56.5f, -23.5f)
+            reflectiveQuadTo(200f, 760f)
+            verticalLineToRelative(-520f)
+            horizontalLineToRelative(-40f)
+            verticalLineToRelative(-80f)
+            horizontalLineToRelative(200f)
+            verticalLineToRelative(-40f)
+            horizontalLineToRelative(240f)
+            verticalLineToRelative(40f)
+            horizontalLineToRelative(200f)
+            verticalLineToRelative(80f)
+            horizontalLineToRelative(-40f)
+            verticalLineToRelative(520f)
+            quadToRelative(0f, 33f, -23.5f, 56.5f)
+            reflectiveQuadTo(680f, 840f)
+            horizontalLineTo(280f)
+            close()
+            moveToRelative(400f, -600f)
+            horizontalLineTo(280f)
+            verticalLineToRelative(520f)
+            horizontalLineToRelative(400f)
+            verticalLineToRelative(-520f)
+            close()
+            moveTo(360f, 680f)
+            horizontalLineToRelative(80f)
+            verticalLineToRelative(-360f)
+            horizontalLineToRelative(-80f)
+            verticalLineToRelative(360f)
+            close()
+            moveToRelative(160f, 0f)
+            horizontalLineToRelative(80f)
+            verticalLineToRelative(-360f)
+            horizontalLineToRelative(-80f)
+            verticalLineToRelative(360f)
+            close()
+            moveTo(280f, 240f)
+            verticalLineToRelative(520f)
+            verticalLineToRelative(-520f)
             close()
         }
     }.build()

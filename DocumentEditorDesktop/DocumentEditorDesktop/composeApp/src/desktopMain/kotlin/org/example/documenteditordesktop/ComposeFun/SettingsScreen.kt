@@ -11,9 +11,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -28,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.example.documenteditor.functions.textToShow
 import kotlinx.coroutines.launch
 import org.example.documenteditordesktop.ClassesViewModels.AppIcons
+import org.example.documenteditordesktop.ClassesViewModels.Navigation
 import org.example.documenteditordesktop.ClassesViewModels.Screen
 import org.example.documenteditordesktop.ClassesViewModels.SettingsManager
 
@@ -88,9 +93,21 @@ fun SettingsScreen() {
         }
 
         TopAppBar(
-            title = "Настройки",
-            screenToNavigate = Screen.MainScreenRoute,
-            imageVector = AppIcons.ArrowBack,
+            title = { Text("Настройки") },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = Color(0xff8192fe),
+                titleContentColor =  Color.White,
+                navigationIconContentColor = Color.White,
+                actionIconContentColor = Color.White
+            ),
+            navigationIcon = {
+                IconButton(onClick = { Navigation.navigateTo(Screen.MainScreenRoute) }) {
+                    Icon(
+                        imageVector = AppIcons.ArrowBack,
+                        contentDescription = null
+                    )
+                }
+            },
         )
 
         if (showBottomSheet) {
