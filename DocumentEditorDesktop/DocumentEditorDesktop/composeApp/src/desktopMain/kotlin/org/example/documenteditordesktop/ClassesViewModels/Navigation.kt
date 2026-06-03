@@ -19,13 +19,12 @@ sealed class Screen {
 }
 
 object Navigation{
+    private val previousCurrentScreen = MutableStateFlow<Screen>(Screen.MainScreenRoute)
 
-    private val privCurrentScreen = MutableStateFlow<Screen>(Screen.MainScreenRoute)
-
-    val currentScreen: StateFlow<Screen> = privCurrentScreen
+    val currentScreen: StateFlow<Screen> = previousCurrentScreen
 
     fun navigateTo(newScreen: Screen){
-        privCurrentScreen.value = newScreen
+        previousCurrentScreen.value = newScreen
     }
 
 }

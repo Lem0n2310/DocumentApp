@@ -39,7 +39,7 @@ import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MyTopAppBar(title: String, screenToNavigate: Screen, imageVector: ImageVector){
+fun TopAppBar(title: String, screenToNavigate: Screen, imageVector: ImageVector){
     TopAppBar(
         title = { Text(title) },
         colors = TopAppBarDefaults.topAppBarColors(
@@ -63,7 +63,7 @@ fun MyTopAppBar(title: String, screenToNavigate: Screen, imageVector: ImageVecto
 // Выбор шаблона
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
-fun TemplatePicker() { // Получаем список шаблонов и нав
+fun TemplatePickScreen() { // Получаем список шаблонов и нав
     val manager = Manager<DocumentTemplate>(DocumentTemplate::class.java)
     // Делаем список шаблонов реактивным, чтобы UI обновлялся при удалении
     val templates = remember {
@@ -130,7 +130,7 @@ fun TemplatePicker() { // Получаем список шаблонов и на
     }
 
     // Снэек бар с подписью местонахождения и кнопкой назад
-    MyTopAppBar(
+    TopAppBar(
         title = "Выбор шаблона",
         screenToNavigate = Screen.MainScreenRoute,
         imageVector = AppIcons.ArrowBack

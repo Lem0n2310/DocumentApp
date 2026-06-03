@@ -8,7 +8,7 @@ import androidx.compose.ui.window.application
 import com.example.documenteditor.ClassesViewModels.templates
 import com.example.documenteditor.ComposeFun.MainScreen
 import com.example.documenteditor.ComposeFun.SettingsScreen
-import com.example.documenteditor.ComposeFun.TemplatePicker
+import com.example.documenteditor.ComposeFun.TemplatePickScreen
 import org.example.documenteditordesktop.ClassesViewModels.Navigation
 import org.example.documenteditordesktop.ClassesViewModels.Screen
 import org.example.documenteditordesktop.ComposeFun.TemplateEditorScreen
@@ -44,27 +44,19 @@ fun main() = application {
         val currentScreen by Navigation.currentScreen.collectAsState()
 
         when (currentScreen) {
-            is Screen.MainScreenRoute -> MainScreen()
-            is Screen.SettingsScreenRoute -> SettingsScreen()
-            is Screen.TemplatePickRoute -> TemplatePicker()
+            is Screen.MainScreenRoute -> MainScreen() // Главный экран
+            is Screen.SettingsScreenRoute -> SettingsScreen() // Экран настроек
+            is Screen.TemplatePickRoute -> TemplatePickScreen() // Экран выбора шаблона
             is Screen.TemplateInputRoute -> {
                 val templateInputRoute = currentScreen as Screen.TemplateInputRoute
-                if(templateInputRoute.dict.isNullOrEmpty()) {
-                    TemplateInput(
-                        templates = templates,
-                        templateId = templateInputRoute.templateId,
-                        dict = null
-                    )
-                }else{
-                    TemplateInput(
-                        templates = templates,
-                        templateId = templateInputRoute.templateId,
-                        dict = templateInputRoute.dict
-                    )
-                }
+                TemplateInput( // экран ввода данных
+                    templates = templates,
+                    templateId = templateInputRoute.templateId,
+                    dict = templateInputRoute.dict
+                )
             }
-            is Screen.RecentDocsRoute -> RecentDocs()
-            is Screen.NewTemplateScreenRoute -> {
+            is Screen.RecentDocsRoute -> RecentDocs() // экран с недавними документами
+            is Screen.NewTemplateScreenRoute -> { // экран создания шаблона
                 val newTemplateScreenRoute = currentScreen as Screen.NewTemplateScreenRoute
                 val file = newTemplateScreenRoute.file
                 TemplateEditorScreen(file)
