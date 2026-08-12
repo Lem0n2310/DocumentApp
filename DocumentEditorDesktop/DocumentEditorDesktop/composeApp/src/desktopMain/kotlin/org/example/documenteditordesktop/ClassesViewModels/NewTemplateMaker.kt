@@ -203,8 +203,7 @@ fun applyTemplateChangesByIndex(
             data class ParagraphSegment(
                 val paragraph: XWPFParagraph,
                 val rangeStart: Int,
-                val rangeEnd: Int,
-                val isBlank: Boolean
+                val rangeEnd: Int
             )
 
             val segments = mutableListOf<ParagraphSegment>()
@@ -218,8 +217,7 @@ fun applyTemplateChangesByIndex(
                     ParagraphSegment(
                         paragraph = p,
                         rangeStart = start,
-                        rangeEnd = end,
-                        isBlank = t.isBlank()
+                        rangeEnd = end
                     )
                 )
                 cursor = end
@@ -229,28 +227,64 @@ fun applyTemplateChangesByIndex(
                 }
             }
 
-            // Для каждого абзаца собираем только те замены,
-            // которые полностью попадают в его диапазон.
-            segments.forEach { segment ->
-                if (segment.isBlank) return@forEach
+            // Локальные замены по абзацам. Важно: раньше брались только
+            // замены целиком внутри одного абзаца — многострочные реквизиты
+            // (выделение через несколько абзацев) отбрасывались, и {{KEY}}
+            // в DOCX не попадал.
+            val perParaReps: MutableMap<XWPFParagraph, MutableList<Replacement>> = mutableMapOf()
 
-                val para = segment.paragraph
-                val paraText = para.text ?: ""
-                if (paraText.isEmpty()) return@forEach
+            fun addParaRep(paragraph: XWPFParagraph, rep: Replacement) {
+                perParaReps.getOrPut(paragraph) { mutableListOf() }.add(rep)
+            }
 
-                val localReps = repsForBlock
-                    .filter { r ->
-                        r.start >= segment.rangeStart && r.end <= segment.rangeEnd
-                    }
-                    .map { r ->
-                        val localStart = (r.start - segment.rangeStart).coerceIn(0, paraText.length)
-                        val localEnd = (r.end - segment.rangeStart).coerceIn(localStart, paraText.length)
-                        Replacement(localStart, localEnd, r.key)
-                    }
-
-                if (localReps.isNotEmpty()) {
-                    applyReplacementsToParagraphRuns(para, paraText, localReps)
+            // С конца, чтобы при пересечениях индексы оставались стабильнее
+            for (r in repsForBlock.sortedByDescending { it.start }) {
+                // end — как в TextRange: exclusive
+                val affected = segments.filter { seg ->
+                    r.start < seg.rangeEnd && r.end > seg.rangeStart
                 }
+                if (affected.isEmpty()) continue
+
+                val first = affected.first()
+                val last = affected.last()
+
+                if (first === last) {
+                    val paraTextLen = (first.paragraph.text ?: "").length
+                    val localStart = (r.start - first.rangeStart).coerceIn(0, paraTextLen)
+                    val localEnd = (r.end - first.rangeStart).coerceIn(localStart, paraTextLen)
+                    if (localStart < localEnd) {
+                        addParaRep(first.paragraph, Replacement(localStart, localEnd, r.key))
+                    }
+                } else {
+                    // Многострочное выделение:
+                    // — в первом абзаце: хвост от start заменяем на {{KEY}}
+                    // — средние абзацы: очищаем
+                    // — в последнем: удаляем префикс до end
+                    val firstLen = (first.paragraph.text ?: "").length
+                    val localStart = (r.start - first.rangeStart).coerceIn(0, firstLen)
+                    addParaRep(first.paragraph, Replacement(localStart, firstLen, r.key))
+
+                    for (i in 1 until affected.lastIndex) {
+                        val mid = affected[i]
+                        val midLen = (mid.paragraph.text ?: "").length
+                        if (midLen > 0) {
+                            addParaRep(mid.paragraph, Replacement(0, midLen, ""))
+                        }
+                    }
+
+                    val lastLen = (last.paragraph.text ?: "").length
+                    val localEnd = (r.end - last.rangeStart).coerceIn(0, lastLen)
+                    if (localEnd > 0) {
+                        addParaRep(last.paragraph, Replacement(0, localEnd, ""))
+                    }
+                }
+            }
+
+            segments.forEach { segment ->
+                val localReps = perParaReps[segment.paragraph] ?: return@forEach
+                if (localReps.isEmpty()) return@forEach
+                val paraText = segment.paragraph.text ?: ""
+                applyReplacementsToParagraphRuns(segment.paragraph, paraText, localReps)
             }
         }
 

@@ -2,9 +2,7 @@ package com.example.documenteditor.ClassesViewModels
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import documenteditordesktop.composeapp.generated.resources.Res
 import org.apache.poi.xwpf.usermodel.XWPFDocument
 import org.example.documenteditordesktop.ClassesViewModels.DocumentTemplate
 import org.example.documenteditordesktop.ClassesViewModels.RecentDocument
@@ -13,14 +11,14 @@ import org.example.documenteditordesktop.ClassesViewModels.TemplatePortable
 import org.example.documenteditordesktop.templatesFun.absoluteTemplate
 import java.awt.FileDialog
 import java.awt.Frame
-import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.FilenameFilter
 
 class SaveViewModel {
-    var isFileSaved by  mutableStateOf(false)
+    var isFileSaved by mutableStateOf(false)
+    var lastError by mutableStateOf<String?>(null)
 
     fun showOpenDialog(
         onFileSelected: (File) -> Unit,
@@ -120,12 +118,29 @@ class SaveViewModel {
         defaultFileName: String,
         templateId: Int
     ): Boolean {
+        isFileSaved = false
+        lastError = null
+
         val manager = Manager<RecentDocument>(RecentDocument::class.java)
         val templateFolder = File(System.getProperty("user.home"),"DocumentEditor/Templates")
         val templateFile = File(templateFolder, "${nameForDev}.docx")
-        val templateDocument = FileInputStream(templateFile).use{stream ->
-            XWPFDocument(stream)
+
+        if (!templateFile.exists()) {
+            lastError = "Файл шаблона не найден: ${templateFile.name}"
+            println(lastError)
+            return false
         }
+
+        val templateDocument = try {
+            FileInputStream(templateFile).use { stream ->
+                XWPFDocument(stream)
+            }
+        } catch (e: Exception) {
+            lastError = "Не удалось открыть шаблон: ${e.message}"
+            println(lastError)
+            return false
+        }
+
         val document = absoluteTemplate(
             templateDocument,
             fieldValues
@@ -156,11 +171,14 @@ class SaveViewModel {
                     println("Файл сохранён: ${outputFile.absolutePath}")
                 } catch (e: Exception) {
                     println("Ошибка при сохранении: ${e.message}")
+                    lastError = e.message ?: "Ошибка при сохранении"
                     isSuccess = false
+                    isFileSaved = false
                 }
             },
             onCancel = {
                 isSuccess = false
+                isFileSaved = false
             }
         )
 

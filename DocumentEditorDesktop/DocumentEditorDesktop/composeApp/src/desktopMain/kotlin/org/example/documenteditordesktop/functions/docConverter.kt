@@ -1,6 +1,7 @@
 package org.example.documenteditordesktop.functions
 
 import org.apache.poi.hwpf.HWPFDocument
+import org.apache.poi.hwpf.usermodel.TableIterator
 import org.apache.poi.xwpf.usermodel.XWPFDocument
 import java.io.File
 import java.io.FileInputStream
@@ -12,6 +13,9 @@ import java.io.FileOutputStream
  * Переносит текст по абзацам, без сохранения стилей и сложной структуры.
  * Используется только как промежуточный шаг для создания шаблонов
  * из старых DOC‑файлов.
+ *
+ * @throws IllegalArgumentException если в DOC есть таблицы (индексы шаблона
+ *         после плоской конвертации будут некорректны).
  */
 fun convertDocToDocx(sourceFile: File): File {
     val userHome = System.getProperty("user.home")
@@ -24,6 +28,14 @@ fun convertDocToDocx(sourceFile: File): File {
 
     FileInputStream(sourceFile).use { fis ->
         val hwpf = HWPFDocument(fis)
+
+        if (TableIterator(hwpf.range).hasNext()) {
+            hwpf.close()
+            throw IllegalArgumentException(
+                "DOC с таблицами не поддерживается. Сохраните файл как DOCX и откройте снова."
+            )
+        }
+
         val xwpf = XWPFDocument()
 
         val range = hwpf.range
@@ -46,4 +58,3 @@ fun convertDocToDocx(sourceFile: File): File {
 
     return targetFile
 }
-

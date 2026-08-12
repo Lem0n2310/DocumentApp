@@ -78,14 +78,22 @@ fun MainScreen() {
                     onClick = {
                         saveViewModel.showOpenDialog(
                             onFileSelected = { currentFile ->
-                                val resultFile = if (currentFile.extension.equals("doc", ignoreCase = true)) {
-                                    convertDocToDocx(currentFile)
-                                } else {
-                                    currentFile
+                                try {
+                                    val resultFile = if (currentFile.extension.equals("doc", ignoreCase = true)) {
+                                        convertDocToDocx(currentFile)
+                                    } else {
+                                        currentFile
+                                    }
+                                    file = resultFile
+                                    openCreateTemplate = true
+                                    Navigation.navigateTo(Screen.NewTemplateScreenRoute(resultFile))
+                                } catch (e: Exception) {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            e.message ?: "Не удалось открыть файл"
+                                        )
+                                    }
                                 }
-                                file = resultFile
-                                openCreateTemplate = true
-                                Navigation.navigateTo(Screen.NewTemplateScreenRoute(resultFile))
                             },
                             onCancel = {
                                 println("Открытие файла отменено")

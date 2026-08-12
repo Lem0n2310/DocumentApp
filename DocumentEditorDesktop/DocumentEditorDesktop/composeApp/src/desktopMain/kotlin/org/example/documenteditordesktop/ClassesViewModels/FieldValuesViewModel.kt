@@ -14,6 +14,10 @@ class FieldValuesViewModel {
     }
 
     fun clearValues(){
-        fieldValues.clear() // очищение словаря
+        // Оставляем ключи с пустыми значениями — иначе isFull() на пустой map
+        // считает форму заполненной и позволяет сохранить {{KEY}} как есть.
+        fieldValues.keys.toList().forEach { key ->
+            fieldValues[key] = ""
+        }
     }
 }

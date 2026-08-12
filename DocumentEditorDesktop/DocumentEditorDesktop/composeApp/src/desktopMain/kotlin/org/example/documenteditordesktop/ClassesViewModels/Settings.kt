@@ -18,7 +18,14 @@ object SettingsManager{
     private val settingsDir = File(System.getProperty("user.home"), "DocumentEditor/DataBase")
     private val settingsFile = File(settingsDir, "Settings.json")
 
+    private fun ensureDir() {
+        if (!settingsDir.exists()) {
+            settingsDir.mkdirs()
+        }
+    }
+
     fun saveSettings(settings: AppSettings){
+        ensureDir()
         val jsonString = json.encodeToString(settings)
         settingsFile.writeText(jsonString)
     }
@@ -33,6 +40,7 @@ object SettingsManager{
     }
 
     private fun createSettings(): AppSettings {
+        ensureDir()
         val defaultSettings = AppSettings()
         val jsonString = json.encodeToString(defaultSettings)
         settingsFile.writeText(jsonString)

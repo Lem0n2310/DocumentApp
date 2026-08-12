@@ -2,6 +2,7 @@ package org.example.documenteditordesktop.ComposeFun
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -61,21 +63,70 @@ fun TemplateInput(templates: List<DocumentTemplate>, templateId: Int, dict: Map<
         mutableStateOf(Manager<DocumentTemplate>(DocumentTemplate::class.java).loadJson())
     }
 
-    // Шаблон
-    val selectedTemplate by remember { mutableStateOf(currentTemplates.first { it.id == templateId }) } // Выбраный шаблон
+    val selectedTemplate = remember(templateId, currentTemplates) {
+        currentTemplates.firstOrNull { it.id == templateId }
+    }
+
+    if (selectedTemplate == null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xff9DA7E8)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Шаблон не найден (возможно, удалён)")
+                Button(
+                    onClick = { Navigation.navigateTo(Screen.TemplatePickRoute) },
+                    modifier = Modifier.padding(top = 16.dp)
+                ) {
+                    Text("К списку шаблонов")
+                }
+            }
+        }
+        return
+    }
 
     LaunchedEffect(Unit) {
-        if(fieldViewModel.forFlag) {
+        if (fieldViewModel.forFlag) {
             selectedTemplate.fields.forEach { field ->
                 fieldViewModel.fieldValues[field.key] = ""
             }
             fieldViewModel.forFlag = false
         }
-        if(!dict.isNullOrEmpty()){
+        if (!dict.isNullOrEmpty()) {
             selectedTemplate.fields.forEach { documentField ->
-                fieldViewModel.fieldValues[documentField.key] = dict[documentField.key]!!
+                fieldViewModel.fieldValues[documentField.key] = dict[documentField.key] ?: ""
             }
         }
+    }
+
+    suspend fun saveDocument() {
+        val ok = saveViewModel.save(
+            selectedTemplate = selectedTemplate,
+            fieldValues = fieldViewModel.fieldValues,
+            nameForDev = selectedTemplate.nameForDevelop,
+            defaultFileName = selectedTemplate.nameForUser + ".docx",
+            templateId = templateId,
+        )
+        if (!ok) {
+            saveViewModel.lastError?.let { err ->
+                // Показываем через диалог проверки / leave — простой AlertDialog ниже
+                println(err)
+            }
+        }
+    }
+
+    val saveError = saveViewModel.lastError
+    if (saveError != null) {
+        AlertDialog(
+            onDismissRequest = { saveViewModel.lastError = null },
+            confirmButton = {
+                TextButton(onClick = { saveViewModel.lastError = null }) { Text("OK") }
+            },
+            title = { Text("Не удалось сохранить") },
+            text = { Text(saveError) }
+        )
     }
 
     Box(
@@ -94,28 +145,11 @@ fun TemplateInput(templates: List<DocumentTemplate>, templateId: Int, dict: Map<
                             showLeaveValueDialog = true // включаем диалог
                         } else {
                             if (isSaveValue) {
+                                coroutineScope.launch { saveDocument() }
+                            } else {
                                 coroutineScope.launch {
-                                    saveViewModel.save(
-                                        selectedTemplate = selectedTemplate,
-                                        fieldValues = fieldViewModel.fieldValues,
-                                        nameForDev = selectedTemplate.nameForDevelop,
-                                        defaultFileName = selectedTemplate.nameForUser + ".docx",
-                                        templateId = templateId,
-                                    )
-                                }
-                            } // Проверяем включено ли в настройках сохранение значений, сохраняем
-                            else {
-                                coroutineScope.launch {
-                                    saveViewModel.save(
-                                        selectedTemplate = selectedTemplate,
-                                        fieldValues = fieldViewModel.fieldValues,
-                                        nameForDev = selectedTemplate.nameForDevelop,
-                                        defaultFileName = selectedTemplate.nameForUser + ".docx",
-                                        templateId = templateId,
-                                    )
-                                } // Сохраняем
-                                coroutineScope.launch {
-                                    delay(2000) // Через 2 секунды удаляем введенные значения, если файл сохранен
+                                    saveDocument()
+                                    delay(2000)
                                     if (saveViewModel.isFileSaved) {
                                         fieldViewModel.clearValues()
                                     }
@@ -130,10 +164,8 @@ fun TemplateInput(templates: List<DocumentTemplate>, templateId: Int, dict: Map<
                     Row {
                         Checkbox(
                             checked = !showCheckValuesFlagSetting,
-                            onCheckedChange = { // если галочка стоит
-                                //showMessage(context = context, message = "Можно изменить в настройках")
+                            onCheckedChange = {
                                 coroutineScope.launch {
-                                    // Больше не спрашиваем перед сохраненением
                                     settings = settings.copy(showCheckValuesFlag = !it)
                                     SettingsManager.saveSettings(settings)
                                 }
@@ -147,7 +179,7 @@ fun TemplateInput(templates: List<DocumentTemplate>, templateId: Int, dict: Map<
 
         if (showLeaveValueDialog) {// Диалог: Оставлять значения после сохранения
             AlertDialog(
-                onDismissRequest = { showLeaveValueDialog = false }, // убираем диалог если нажали мимо
+                onDismissRequest = { showLeaveValueDialog = false },
                 confirmButton = {
                     TextButton(onClick = {
                         coroutineScope.launch {
@@ -155,33 +187,17 @@ fun TemplateInput(templates: List<DocumentTemplate>, templateId: Int, dict: Map<
                             SettingsManager.saveSettings(settings)
                         }
                         showLeaveValueDialog = false
-                        coroutineScope.launch {
-                            saveViewModel.save(
-                                selectedTemplate = selectedTemplate,
-                                fieldValues = fieldViewModel.fieldValues,
-                                nameForDev = selectedTemplate.nameForDevelop,
-                                defaultFileName = selectedTemplate.nameForUser + ".docx",
-                                templateId = templateId,
-                            )
-                        } // Сохраняем
+                        coroutineScope.launch { saveDocument() }
                     }) { Text("Оставить") }
                 },
                 dismissButton = {
                     TextButton(onClick = {
                         showLeaveValueDialog = false
                         coroutineScope.launch {
-                            saveViewModel.save(
-                                selectedTemplate = selectedTemplate,
-                                fieldValues = fieldViewModel.fieldValues,
-                                nameForDev = selectedTemplate.nameForDevelop,
-                                defaultFileName = selectedTemplate.nameForUser + ".docx",
-                                templateId = templateId,
-                            )
-                        } // Сохраняем
-                        coroutineScope.launch {
                             settings = settings.copy(isSaveValue = false)
                             SettingsManager.saveSettings(settings)
-                            delay(2000)// Через 2 секунды удаляем введенные занчения, если файл сохранен
+                            saveDocument()
+                            delay(2000)
                             if (saveViewModel.isFileSaved) {
                                 fieldViewModel.clearValues()
                             }
@@ -193,10 +209,8 @@ fun TemplateInput(templates: List<DocumentTemplate>, templateId: Int, dict: Map<
                     Row {
                         Checkbox(
                             checked = !showLeaveValueAlertFlagSetting,
-                            onCheckedChange = { // если галочка стоит
-                                //showMessage(context = context, message = "Можно изменить в настройках")
+                            onCheckedChange = {
                                 coroutineScope.launch {
-                                    // Больше не спрашиваем перед сохраненением
                                     settings = settings.copy(showLeaveValueAlertFlag = !it)
                                     SettingsManager.saveSettings(settings)
                                 }
@@ -212,20 +226,18 @@ fun TemplateInput(templates: List<DocumentTemplate>, templateId: Int, dict: Map<
             modifier = Modifier
                 .padding(top = 110.dp, bottom = 80.dp)
                 .imePadding()
-        )
-        { // Используем Column для вертикального расположения полей
-            // Проходим по всем полям выбранного шаблона
+        ) {
             items(selectedTemplate.fields) { field ->
-                // В зависимости от типа поля отображаем соответствующий компонент
-                // Текстовое поле для ввода
                 TextField(
                     modifier = Modifier.padding(vertical = 10.dp),
-                    value = fieldViewModel.fieldValues[field.key]
-                        ?: "", // Получаем текущее значение или пустую строку
+                    value = fieldViewModel.fieldValues[field.key] ?: "",
                     onValueChange = {
                         fieldViewModel.updateValue(key = field.key, value = it)
-                    }, // Обновляем значение при изменении
-                    label = { Text(field.label) } // Отображаем метку поля
+                    },
+                    label = { Text(field.label) },
+                    singleLine = false,
+                    minLines = 1,
+                    maxLines = 12
                 )
             }
         }
@@ -235,7 +247,7 @@ fun TemplateInput(templates: List<DocumentTemplate>, templateId: Int, dict: Map<
         title = { Text(text = selectedTemplate.nameForUser) },
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = Color(0xff8192fe),
-            titleContentColor =  Color.White,
+            titleContentColor = Color.White,
             navigationIconContentColor = Color.White,
             actionIconContentColor = Color.White
         ),
@@ -249,37 +261,18 @@ fun TemplateInput(templates: List<DocumentTemplate>, templateId: Int, dict: Map<
         },
         actions = {
             IconButton(onClick = {
-                if (!fieldViewModel.fieldValues.isFull() && showCheckValuesFlagSetting) showCheckValuesDialog = true
-                else {
-                    if (showLeaveValueAlertFlagSetting) { // Проверяем включено ли в настройках отбражение диалога
-                        showLeaveValueDialog = true // включаем диалог
-                    } else {
-                        if (isSaveValue) {
-                            coroutineScope.launch {
-                                saveViewModel.save(
-                                    selectedTemplate = selectedTemplate,
-                                    fieldValues = fieldViewModel.fieldValues,
-                                    nameForDev = selectedTemplate.nameForDevelop,
-                                    defaultFileName = selectedTemplate.nameForUser + ".docx",
-                                    templateId = templateId
-                                )
-                            }
-                        } // Проверяем включено ли в настройках сохранение значений, сохраняем
-                        else {
-
-                            coroutineScope.launch {
-                                saveViewModel.save(
-                                    selectedTemplate = selectedTemplate,
-                                    fieldValues = fieldViewModel.fieldValues,
-                                    nameForDev = selectedTemplate.nameForDevelop,
-                                    defaultFileName = selectedTemplate.nameForUser + ".docx",
-                                    templateId = templateId,
-                                ) // Сохраняем
-                                delay(2000) // Через 2 секунды удаляем введенные занчения, если файл сохранен
-                                if (saveViewModel.isFileSaved) {
-                                    fieldViewModel.clearValues()
-                                }
-                            }
+                if (!fieldViewModel.fieldValues.isFull() && showCheckValuesFlagSetting) {
+                    showCheckValuesDialog = true
+                } else if (showLeaveValueAlertFlagSetting) {
+                    showLeaveValueDialog = true
+                } else if (isSaveValue) {
+                    coroutineScope.launch { saveDocument() }
+                } else {
+                    coroutineScope.launch {
+                        saveDocument()
+                        delay(2000)
+                        if (saveViewModel.isFileSaved) {
+                            fieldViewModel.clearValues()
                         }
                     }
                 }
