@@ -20,10 +20,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.rememberCoroutineScope
 import com.example.documenteditor.ClassesViewModels.SaveViewModel
+import kotlinx.coroutines.launch
 import org.example.documenteditordesktop.ClassesViewModels.AppIcons
 import org.example.documenteditordesktop.ClassesViewModels.Navigation
 import org.example.documenteditordesktop.ClassesViewModels.Screen
+import org.example.documenteditordesktop.ClassesViewModels.TemplatePortable
 import org.example.documenteditordesktop.functions.convertDocToDocx
 import java.io.File
 
@@ -32,6 +37,8 @@ fun MainScreen() {
     val saveViewModel = remember { SaveViewModel() }
     var openCreateTemplate by remember { mutableStateOf(false) }
     var file: File? = null
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
 
     Box(
@@ -45,7 +52,7 @@ fun MainScreen() {
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center // Бокс на весь экран, контент по центру
         ) {
-            // Три кнопки в колонке
+            // Кнопки в колонке
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Button(
                     onClick = { Navigation.navigateTo(Screen.TemplatePickRoute) },// to templatePick
@@ -92,10 +99,47 @@ fun MainScreen() {
                 ) {
                     Text("Создать шаблон")
                 }
+
+                Button(
+                    onClick = {
+                        saveViewModel.showOpenTemplatePackageDialog(
+                            onFileSelected = { packageFile ->
+                                TemplatePortable.importTemplate(packageFile)
+                                    .onSuccess { imported ->
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar(
+                                                "Шаблон «${imported.nameForUser}» готов к работе"
+                                            )
+                                        }
+                                        Navigation.navigateTo(Screen.TemplatePickRoute)
+                                    }
+                                    .onFailure { error ->
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar(
+                                                error.message ?: "Не удалось импортировать шаблон"
+                                            )
+                                        }
+                                    }
+                            },
+                            onCancel = {
+                                println("Импорт шаблона отменён")
+                            }
+                        )
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        contentColor = Color.Black,
+                        containerColor = Color.White
+                    )
+                ) {
+                    Text("Импортировать шаблон")
+                }
             }
         }
 
-
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp)
+        )
     }
 
     Box(modifier = Modifier.padding(start = 25.dp, top = 25.dp)) {
