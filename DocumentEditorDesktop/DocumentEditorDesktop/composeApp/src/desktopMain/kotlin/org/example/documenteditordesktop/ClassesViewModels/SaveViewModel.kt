@@ -9,6 +9,7 @@ import org.apache.poi.xwpf.usermodel.XWPFDocument
 import org.example.documenteditordesktop.ClassesViewModels.DocumentTemplate
 import org.example.documenteditordesktop.ClassesViewModels.RecentDocument
 import org.example.documenteditordesktop.ClassesViewModels.Manager
+import org.example.documenteditordesktop.ClassesViewModels.TemplatePortable
 import org.example.documenteditordesktop.templatesFun.absoluteTemplate
 import java.awt.FileDialog
 import java.awt.Frame
@@ -43,6 +44,24 @@ class SaveViewModel {
         }
     }
 
+    fun showOpenTemplatePackageDialog(
+        onFileSelected: (File) -> Unit,
+        onCancel: () -> Unit = {}
+    ) {
+        val dialog = FileDialog(null as Frame?, "Импортировать шаблон", FileDialog.LOAD).apply {
+            filenameFilter = FilenameFilter { _, name ->
+                name.endsWith(".${TemplatePortable.EXTENSION}", ignoreCase = true) ||
+                    name.endsWith(".zip", ignoreCase = true)
+            }
+            isVisible = true
+        }
+
+        if (dialog.file != null) {
+            onFileSelected(File(dialog.directory, dialog.file))
+        } else {
+            onCancel()
+        }
+    }
 
     fun showSaveDialog(
         defaultFileName: String,
@@ -58,6 +77,35 @@ class SaveViewModel {
         if (dialog.file != null) {
             val file = File(dialog.directory, dialog.file).let { file ->
                 if (!file.name.endsWith(".docx")) File(file.parent, "${file.name}.docx") else file
+            }
+            onFileSelected(file)
+        } else {
+            onCancel()
+        }
+    }
+
+    fun showSaveTemplatePackageDialog(
+        defaultFileName: String,
+        onFileSelected: (File) -> Unit,
+        onCancel: () -> Unit = {}
+    ) {
+        val extension = TemplatePortable.EXTENSION
+        val dialog = FileDialog(null as Frame?, "Поделиться шаблоном", FileDialog.SAVE).apply {
+            file = if (defaultFileName.endsWith(".$extension", ignoreCase = true)) {
+                defaultFileName
+            } else {
+                "$defaultFileName.$extension"
+            }
+            isVisible = true
+        }
+
+        if (dialog.file != null) {
+            val file = File(dialog.directory, dialog.file).let { chosen ->
+                if (!chosen.name.endsWith(".$extension", ignoreCase = true)) {
+                    File(chosen.parent, "${chosen.name}.$extension")
+                } else {
+                    chosen
+                }
             }
             onFileSelected(file)
         } else {

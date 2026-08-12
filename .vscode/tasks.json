@@ -1,0 +1,46 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "composeApp:run",
+            "type": "shell",
+            "command": "./gradlew",
+            "args": [
+                ":composeApp:run"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/DocumentEditorDesktop/DocumentEditorDesktop",
+                "env": {}
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "focus": false
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "composeApp:build",
+            "type": "shell",
+            "command": "./gradlew",
+            "args": [
+                ":composeApp:compileKotlinDesktop"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/DocumentEditorDesktop/DocumentEditorDesktop"
+            },
+            "group": "build",
+            "presentation": {
+                "reveal": "silent",
+                "panel": "shared"
+            },
+            "problemMatcher": [
+                "$javac"
+            ]
+        }
+    ]
+}

@@ -198,9 +198,8 @@ fun applyTemplateChangesByIndex(
         val repsForBlock = replacementsByBlock[idCounter]
 
         if (!repsForBlock.isNullOrEmpty()) {
-            // Раскладываем объединённый текст по абзацам так же,
-            // как это делал parseDocxFile: каждый непустой параграф
-            // даёт свой текст, пустой — один символ переноса строки.
+            // Как в parseDocxFile: абзацы склеиваются через '\n'
+            // (paragraphs.joinToString("\n")).
             data class ParagraphSegment(
                 val paragraph: XWPFParagraph,
                 val rangeStart: Int,
@@ -211,33 +210,22 @@ fun applyTemplateChangesByIndex(
             val segments = mutableListOf<ParagraphSegment>()
             var cursor = 0
 
-            currentBlockParas.forEach { p ->
+            currentBlockParas.forEachIndexed { index, p ->
                 val t = p.text ?: ""
-                if (t.isNotBlank()) {
-                    val start = cursor
-                    val end = start + t.length
-                    segments.add(
-                        ParagraphSegment(
-                            paragraph = p,
-                            rangeStart = start,
-                            rangeEnd = end,
-                            isBlank = false
-                        )
+                val start = cursor
+                val end = start + t.length
+                segments.add(
+                    ParagraphSegment(
+                        paragraph = p,
+                        rangeStart = start,
+                        rangeEnd = end,
+                        isBlank = t.isBlank()
                     )
-                    cursor = end
-                } else {
-                    // пустой параграф представлен как "\n"
-                    val start = cursor
-                    val end = start + 1
-                    segments.add(
-                        ParagraphSegment(
-                            paragraph = p,
-                            rangeStart = start,
-                            rangeEnd = end,
-                            isBlank = true
-                        )
-                    )
-                    cursor = end
+                )
+                cursor = end
+                // Разделитель '\n' между абзацами (кроме последнего)
+                if (index < currentBlockParas.lastIndex) {
+                    cursor += 1
                 }
             }
 
@@ -291,7 +279,8 @@ fun applyTemplateChangesByIndex(
                         row.tableCells.forEachIndexed { cIdx, cell ->
                             val reps = tableReps[Pair(rIdx, cIdx)]
                             if (!reps.isNullOrEmpty()) {
-                                val original = cell.text ?: ""
+                                // Тот же формат, что в parseDocxFile / cellTextWithParagraphs
+                                val original = cell.paragraphs.joinToString("\n") { it.text ?: "" }
                                 val replaced = applyReplacementsToString(original, reps)
                                 setCellTextPreservingNewlines(cell, replaced)
                             }
