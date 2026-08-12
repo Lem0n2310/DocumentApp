@@ -83,7 +83,7 @@ fun RecentDocs(){
                                 if(isHover[document] == true){
                                     TextButton(
                                         onClick = {
-                                            manager.deleteDocument(document.name)
+                                            manager.deleteDocument(document.path)
                                             recentDocs = manager.loadJson()
                                         },
                                         modifier = Modifier.onPointerEvent(PointerEventType.Enter){isHover[document] = true}

@@ -72,12 +72,20 @@ class Manager<T: Any>(
         }
     }
 
+    private fun ensureDir() {
+        if (!documentDir.exists()) {
+            documentDir.mkdirs()
+        }
+    }
+
     private fun createDocFile(): MutableList<T> {
+        ensureDir()
         documentFile.writeText("[]")
         return mutableListOf()
     }
 
     fun saveJson(){
+        ensureDir()
         val json = Gson().toJson(documents)
         documentFile.writeText(json)
     }
@@ -94,7 +102,8 @@ class Manager<T: Any>(
     fun deleteDocument(name: String = "", id: Int = 0){
         when(documentType){
             RecentDocument::class.java -> {
-                (documents as MutableList<RecentDocument>).removeAll { it.path.contains(name) }
+                // Точное совпадение пути (раньше path.contains(name) удалял лишние записи)
+                (documents as MutableList<RecentDocument>).removeAll { it.path == name }
                 saveJson()
             }
             DocumentTemplate::class.java ->{

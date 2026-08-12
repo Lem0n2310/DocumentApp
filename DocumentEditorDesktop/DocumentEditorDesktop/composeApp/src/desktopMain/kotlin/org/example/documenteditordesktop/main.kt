@@ -1,6 +1,5 @@
 package org.example.documenteditordesktop
 
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.window.Window
@@ -9,6 +8,7 @@ import com.example.documenteditor.ClassesViewModels.templates
 import com.example.documenteditor.ComposeFun.MainScreen
 import com.example.documenteditor.ComposeFun.SettingsScreen
 import com.example.documenteditor.ComposeFun.TemplatePickScreen
+import kotlinx.coroutines.Dispatchers
 import org.example.documenteditordesktop.ClassesViewModels.Navigation
 import org.example.documenteditordesktop.ClassesViewModels.Screen
 import org.example.documenteditordesktop.ComposeFun.TemplateEditorScreen
@@ -18,30 +18,33 @@ import org.example.documenteditordesktop.functions.checkFolderExists
 import org.example.documenteditordesktop.functions.createFolder
 
 fun main() = application {
+    // Синхронно до UI — иначе первый write в DataBase/Templates может упасть
+    run {
+        val baseFolder = "DocumentEditor"
+        if (!checkFolderExists(baseFolder)) {
+            createFolder(baseFolder)
+            createFolder("$baseFolder/DataBase")
+            createFolder("$baseFolder/Templates")
+            println("Папки созданы успешно")
+        } else {
+            if (!checkFolderExists("$baseFolder/DataBase")) {
+                createFolder("$baseFolder/DataBase")
+            }
+            if (!checkFolderExists("$baseFolder/Templates")) {
+                createFolder("$baseFolder/Templates")
+            }
+        }
+    }
+
     Window(
         onCloseRequest = ::exitApplication,
         title = "documenteditordesktop",
     ) {
-        LaunchedEffect(Unit) {
-            // При старте создаем необходимые папки
-            val baseFolder = "DocumentEditor"
-            if (!checkFolderExists(baseFolder)) {
-                createFolder(baseFolder)
-                createFolder("$baseFolder/DataBase")
-                createFolder("$baseFolder/Templates")
-                println("Папки созданы успешно")
-            } else {
-                // Проверяем и создаем подпапки если нужно
-                if (!checkFolderExists("$baseFolder/DataBase")) {
-                    createFolder("$baseFolder/DataBase")
-                }
-                if (!checkFolderExists("$baseFolder/Templates")) {
-                    createFolder("$baseFolder/Templates")
-                }
-            }
-        }
-        // текущий экран
-        val currentScreen by Navigation.currentScreen.collectAsState()
+        // Main.immediate: на Desktop collectAsState иначе лишний раз диспатчит
+        // и при смене экрана/hot reload ломает animateAsState (Material3).
+        val currentScreen by Navigation.currentScreen.collectAsState(
+            context = Dispatchers.Main.immediate
+        )
 
         when (currentScreen) {
             is Screen.MainScreenRoute -> MainScreen() // Главный экран

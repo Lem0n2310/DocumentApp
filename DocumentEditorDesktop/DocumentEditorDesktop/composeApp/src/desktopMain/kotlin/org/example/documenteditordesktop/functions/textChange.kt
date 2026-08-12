@@ -38,6 +38,23 @@ fun tableChange(document: XWPFDocument, replace: Map<String, String>) {
 }
 
 /**
+ * Пишет текст в run с мягкими переносами строк (w:br) вместо литеральных '\n',
+ * чтобы многострочные значения (например, реквизиты) корректно отображались в Word.
+ */
+private fun setRunTextWithBreaks(run: XWPFRun, text: String) {
+    run.setText("", 0)
+    val parts = text.split("\n")
+    parts.forEachIndexed { index, part ->
+        if (index == 0) {
+            run.setText(part, 0)
+        } else {
+            run.addBreak()
+            run.setText(part)
+        }
+    }
+}
+
+/**
  * Заменяет плейсхолдеры в параграфе. Текст всех run'ов объединяется в одну строку,
  * затем применяются все замены — так заменяются фразы, разбитые на несколько run'ов
  * (типично для DOCX). Результат записывается обратно в run'ы с сохранением стилей.
@@ -52,12 +69,26 @@ private fun applyReplaceInParagraph(
 
     val runTexts = runs.map { it.getText(0) ?: "" }
     var fullText = runTexts.joinToString("")
+    val original = fullText
 
     replace.forEach { (oldWord, newWord) ->
         fullText = fullText.replace(oldWord, newWord)
     }
     val newFullText = fullText
-    if (newFullText == runTexts.joinToString("")) return
+    if (newFullText == original) return
+
+    // Многострочная подстановка: нельзя размазать '\n' по run'ам как обычный текст —
+    // нужен break. Кладём результат в первый run, остальные очищаем.
+    if (newFullText.contains('\n')) {
+        runs.forEachIndexed { index, run ->
+            if (index == 0) {
+                setRunTextWithBreaks(run, newFullText)
+            } else {
+                run.setText("", 0)
+            }
+        }
+        return
+    }
 
     // Распределяем новый текст по run'ам по длинам старых run'ов (сохраняем стили)
     var index = 0

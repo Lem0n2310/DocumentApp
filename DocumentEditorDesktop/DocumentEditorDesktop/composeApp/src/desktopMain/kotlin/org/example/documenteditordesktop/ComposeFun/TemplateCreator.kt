@@ -197,7 +197,7 @@ private fun cellHighlightColor(
     return null
 }
 
-/** Проверяет, пересекается ли новый диапазон с уже занятыми фрагментами в том же блоке */
+/** Проверяет, пересекается ли новый диапазон с уже занятыми фрагментами в том же блоке/ячейке */
 private fun isRangeTaken(
     blockId: Int,
     start: Int,
@@ -205,10 +205,21 @@ private fun isRangeTaken(
     fields: Map<DocumentField, Map<List<Int>, String>>,
     inProgressFragments: Map<List<Int>, String>,
     skipFieldLabel: String? = null,
+    rowId: Int = -1,
+    colId: Int = -1,
 ): Boolean {
     fun check(fragments: Map<List<Int>, String>): Boolean {
         fragments.keys.forEach { key ->
-            if (key.size == 3 && key[0] == blockId) {
+            if (rowId >= 0 && colId >= 0) {
+                if (key.size == 5 &&
+                    key[0] == blockId &&
+                    key[1] == rowId &&
+                    key[2] == colId &&
+                    rangesOverlap(start, end, key[3], key[4])
+                ) {
+                    return true
+                }
+            } else if (key.size == 3 && key[0] == blockId) {
                 if (rangesOverlap(start, end, key[1], key[2])) return true
             }
         }
@@ -412,6 +423,8 @@ private fun TableCellFieldDialog(
     rowId: Int,
     colId: Int,
     highlights: List<HighlightRange> = emptyList(),
+    fields: Map<DocumentField, Map<List<Int>, String>> = emptyMap(),
+    skipFieldLabel: String? = null,
     closeDialog: (Boolean) -> Unit,
     getChanges: (SnapshotStateMap<List<Int>, String>) -> Unit
 ) {
@@ -429,16 +442,35 @@ private fun TableCellFieldDialog(
         }
     }
 
+    fun tryAddCurrentFragment(): Boolean {
+        val tid = tableId ?: return false
+        val start = fragmentStartId ?: return false
+        val end = fragmentEndId ?: return false
+        if (currentSelectedText.isBlank()) return false
+        if (isRangeTaken(
+                blockId = tid,
+                start = start,
+                end = end,
+                fields = fields,
+                inProgressFragments = selectedFragments,
+                skipFieldLabel = skipFieldLabel,
+                rowId = rowId,
+                colId = colId,
+            )
+        ) {
+            return false
+        }
+        selectedFragments[listOf(tid, rowId, colId, start, end)] = currentSelectedText
+        currentSelectedText = ""
+        return true
+    }
+
     AlertDialog(
         onDismissRequest = {},
         confirmButton = {
             Button(
                 onClick = {
-                    if (currentSelectedText.isNotBlank()) {
-                        val key = listOfNotNull(tableId, rowId, colId, fragmentStartId, fragmentEndId)
-                        selectedFragments[key] = currentSelectedText
-                        currentSelectedText = ""
-                    }
+                    tryAddCurrentFragment()
                     getChanges(selectedFragments)
                     closeDialog(false)
                 }
@@ -454,7 +486,7 @@ private fun TableCellFieldDialog(
         title = {},
         text = {
             Row {
-                Box(Modifier.weight(0.7f)) {
+                Box(modifier = Modifier.weight(0.7f)) {
                     TextBlockEditor(
                         element = element,
                         rowId = rowId,
@@ -471,10 +503,10 @@ private fun TableCellFieldDialog(
                     )
                 }
 
-                LazyColumn(Modifier.weight(0.3f)) {
+                LazyColumn(modifier = Modifier.weight(0.3f)) {
                     item { Text("Выделенный текст:", modifier = Modifier.padding(top = 12.dp)) }
 
-                    items(selectedFragments.toList()) { (key, selectedText) ->
+                    items(selectedFragments.toList()) { (_, selectedText) ->
                         if (selectedText.isNotBlank()) {
                             Text(
                                 selectedText,
@@ -489,13 +521,7 @@ private fun TableCellFieldDialog(
                     item { Text(currentSelectedText, modifier = Modifier.padding(8.dp)) }
 
                     item {
-                        Button(onClick = {
-                            if (currentSelectedText.isNotBlank()) {
-                                val key = listOfNotNull(tableId, rowId, colId, fragmentStartId, fragmentEndId)
-                                selectedFragments[key] = currentSelectedText
-                                currentSelectedText = ""
-                            }
-                        }) {
+                        Button(onClick = { tryAddCurrentFragment() }) {
                             Icon(AppIcons.PlusImage, contentDescription = "Добавить")
                         }
                     }
@@ -612,6 +638,8 @@ fun LeftSide(
             rowId = selectedRow,
             colId = selectedCol,
             highlights = dialogHighlights,
+            fields = fields,
+            skipFieldLabel = skipFieldLabel,
             closeDialog = { value ->
                 showDialog = value
             },
@@ -761,6 +789,9 @@ fun RightSide(
         if (editorFlag) {
             Button(
                 onClick = {
+                    if (hint.isBlank() || selectedFragments.isEmpty()) {
+                        return@Button
+                    }
                     val documentField = DocumentField(
                         label = hint,
                         key = "{{${hint.uppercase().transliterateRussian().replaceSpacesWithUnderscores()}}}"
@@ -778,10 +809,17 @@ fun RightSide(
                         )
                         currentSelectedTextChange("")
                     }
+                    // После возможного onAddFragment ещё раз проверяем: если фрагмент
+                    // не добавился из‑за пересечения и список пуст — не сохраняем поле.
+                    if (selectedFragments.isEmpty()) {
+                        return@Button
+                    }
                     getDocField(documentField, selectedFragments)
                     editorFlagChange(false)
                 },
-                Modifier.align(Alignment.BottomCenter).padding(0.dp).fillMaxWidth()
+                Modifier.align(Alignment.BottomCenter).padding(0.dp).fillMaxWidth(),
+                enabled = hint.isNotBlank() &&
+                    (selectedFragments.isNotEmpty() || currentSelectedText.isNotBlank())
             ) {
                 Text("Готово")
             }
@@ -848,6 +886,9 @@ fun TemplateEditorScreen(file: File) {
 
                             val nameForDev = nameForUser.transliterateRussian().replaceSpacesWithUnderscores()
                             val templateFolder = File(System.getProperty("user.home"), "DocumentEditor/Templates")
+                            if (!templateFolder.exists()) {
+                                templateFolder.mkdirs()
+                            }
                             val templateFile = File(templateFolder, "${nameForDev}.docx")
                             val docFields = mutableListOf<DocumentField>()
 
