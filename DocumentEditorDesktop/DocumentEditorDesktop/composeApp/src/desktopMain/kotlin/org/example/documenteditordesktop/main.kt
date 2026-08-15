@@ -11,6 +11,7 @@ import com.example.documenteditor.ComposeFun.TemplatePickScreen
 import kotlinx.coroutines.Dispatchers
 import org.example.documenteditordesktop.ClassesViewModels.Navigation
 import org.example.documenteditordesktop.ClassesViewModels.Screen
+import org.example.documenteditordesktop.ComposeFun.CaseScreen
 import org.example.documenteditordesktop.ComposeFun.TemplateEditorScreen
 import org.example.documenteditordesktop.ComposeFun.TemplateInput
 import org.example.documenteditordesktop.ComposeFunpackage.RecentDocs
@@ -55,7 +56,9 @@ fun main() = application {
                 TemplateInput( // экран ввода данных
                     templates = templates,
                     templateId = templateInputRoute.templateId,
-                    dict = templateInputRoute.dict
+                    dict = templateInputRoute.dict,
+                    returnTo = templateInputRoute.returnTo,
+                    caseId = templateInputRoute.caseId
                 )
             }
             is Screen.RecentDocsRoute -> RecentDocs() // экран с недавними документами
@@ -63,6 +66,10 @@ fun main() = application {
                 val newTemplateScreenRoute = currentScreen as Screen.NewTemplateScreenRoute
                 val file = newTemplateScreenRoute.file
                 TemplateEditorScreen(file)
+            }
+            is Screen.CaseScreenRoute -> {
+                val caseRoute = currentScreen as Screen.CaseScreenRoute
+                CaseScreen(caseRoute.caseId)
             }
         }
     }

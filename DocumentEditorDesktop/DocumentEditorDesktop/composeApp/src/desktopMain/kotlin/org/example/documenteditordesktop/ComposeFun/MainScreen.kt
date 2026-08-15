@@ -56,6 +56,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.apache.poi.xwpf.usermodel.XWPFDocument
 import org.example.documenteditordesktop.ClassesViewModels.AppIcons
+import org.example.documenteditordesktop.ClassesViewModels.DocumentCase
 import org.example.documenteditordesktop.ClassesViewModels.DocumentTemplate
 import org.example.documenteditordesktop.ClassesViewModels.Manager
 import org.example.documenteditordesktop.ClassesViewModels.Navigation
@@ -91,11 +92,15 @@ fun MainScreen() {
     val scope = rememberCoroutineScope()
     val templateManager = remember { Manager<DocumentTemplate>(DocumentTemplate::class.java) }
     val recentManager = remember { Manager<RecentDocument>(RecentDocument::class.java) }
+    val caseManager = remember { Manager<DocumentCase>(DocumentCase::class.java) }
     val templates = remember {
         mutableStateListOf<DocumentTemplate>().apply { addAll(templateManager.loadJson()) }
     }
     val recentDocs = remember {
         mutableStateListOf<RecentDocument>().apply { addAll(recentManager.loadJson()) }
+    }
+    val cases = remember {
+        mutableStateListOf<DocumentCase>().apply { addAll(caseManager.loadJson()) }
     }
     var showAddTemplateDialog by remember { mutableStateOf(false) }
     val templateFolder = remember {
@@ -232,77 +237,135 @@ fun MainScreen() {
                     .background(MainBackground)
                     .padding(horizontal = 28.dp, vertical = 24.dp)
             ) {
-                Text(
-                    text = "Шаблоны",
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.Black
-                )
-                Text(
-                    text = "Выберите шаблон или добавьте новый",
-                    fontSize = 14.sp,
-                    color = Color.Black.copy(alpha = 0.65f),
-                    modifier = Modifier.padding(top = 4.dp, bottom = 20.dp)
-                )
-
                 val fullScreen = isAppFullScreen()
                 val previewWidth = if (fullScreen) null else WindowedPreviewWidth
+                val gridMinSize = if (fullScreen) FullscreenPreviewMinSize else WindowedPreviewWidth
+                val gridHSpace = if (fullScreen) 20.dp else 12.dp
+                val gridVSpace = if (fullScreen) 24.dp else 14.dp
 
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(
-                        minSize = if (fullScreen) FullscreenPreviewMinSize else WindowedPreviewWidth
-                    ),
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.spacedBy(if (fullScreen) 20.dp else 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(if (fullScreen) 24.dp else 14.dp),
-                    contentPadding = PaddingValues(bottom = 24.dp)
-                ) {
-                    item(key = "add-template") {
-                        AddTemplateCell(
-                            onClick = { showAddTemplateDialog = true },
-                            previewWidth = previewWidth
-                        )
-                    }
-                    items(templates, key = { it.id }) { template ->
-                        TemplatePreviewCard(
-                            template = template,
-                            previewWidth = previewWidth,
-                            onOpen = {
-                                Navigation.navigateTo(
-                                    Screen.TemplateInputRoute(
-                                        templateId = template.id,
-                                        nameForDev = template.nameForDevelop
+                Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    Text(
+                        text = "Шаблоны",
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.Black
+                    )
+                    Text(
+                        text = "Выберите шаблон или добавьте новый",
+                        fontSize = 14.sp,
+                        color = Color.Black.copy(alpha = 0.65f),
+                        modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                    )
+
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = gridMinSize),
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.spacedBy(gridHSpace),
+                        verticalArrangement = Arrangement.spacedBy(gridVSpace),
+                        contentPadding = PaddingValues(bottom = 12.dp)
+                    ) {
+                        item(key = "add-template") {
+                            AddTemplateCell(
+                                onClick = { showAddTemplateDialog = true },
+                                previewWidth = previewWidth,
+                                title = "Добавить шаблон",
+                                caption = "Новый шаблон"
+                            )
+                        }
+                        items(templates, key = { it.id }) { template ->
+                            TemplatePreviewCard(
+                                template = template,
+                                previewWidth = previewWidth,
+                                onOpen = {
+                                    Navigation.navigateTo(
+                                        Screen.TemplateInputRoute(
+                                            templateId = template.id,
+                                            nameForDev = template.nameForDevelop
+                                        )
                                     )
-                                )
-                            },
-                            onShare = {
-                                saveViewModel.showSaveTemplatePackageDialog(
-                                    defaultFileName = template.nameForUser.ifBlank { template.nameForDevelop },
-                                    onFileSelected = { dest ->
-                                        TemplatePortable.exportTemplate(template, dest)
-                                            .onSuccess { file ->
-                                                scope.launch {
-                                                    snackbarHostState.showSnackbar(
-                                                        "Файл сохранён: ${file.name}"
-                                                    )
+                                },
+                                onShare = {
+                                    saveViewModel.showSaveTemplatePackageDialog(
+                                        defaultFileName = template.nameForUser.ifBlank { template.nameForDevelop },
+                                        onFileSelected = { dest ->
+                                            TemplatePortable.exportTemplate(template, dest)
+                                                .onSuccess { file ->
+                                                    scope.launch {
+                                                        snackbarHostState.showSnackbar(
+                                                            "Файл сохранён: ${file.name}"
+                                                        )
+                                                    }
                                                 }
-                                            }
-                                            .onFailure { error ->
-                                                scope.launch {
-                                                    snackbarHostState.showSnackbar(
-                                                        error.message ?: "Не удалось экспортировать шаблон"
-                                                    )
+                                                .onFailure { error ->
+                                                    scope.launch {
+                                                        snackbarHostState.showSnackbar(
+                                                            error.message ?: "Не удалось экспортировать шаблон"
+                                                        )
+                                                    }
                                                 }
-                                            }
-                                    }
-                                )
-                            },
-                            onDelete = {
-                                File(templateFolder, "${template.nameForDevelop}.docx").delete()
-                                templateManager.deleteDocument(id = template.id)
-                                templates.remove(template)
-                            }
-                        )
+                                        }
+                                    )
+                                },
+                                onDelete = {
+                                    File(templateFolder, "${template.nameForDevelop}.docx").delete()
+                                    templateManager.deleteDocument(id = template.id)
+                                    templates.remove(template)
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 10.dp)
+                        .height(1.dp)
+                        .background(Color.Black.copy(alpha = 0.12f))
+                )
+
+                Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    Text(
+                        text = "Дела",
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.Black
+                    )
+                    Text(
+                        text = "Объедините шаблоны и заполните общие данные один раз",
+                        fontSize = 14.sp,
+                        color = Color.Black.copy(alpha = 0.65f),
+                        modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                    )
+
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = gridMinSize),
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.spacedBy(gridHSpace),
+                        verticalArrangement = Arrangement.spacedBy(gridVSpace),
+                        contentPadding = PaddingValues(bottom = 12.dp)
+                    ) {
+                        item(key = "add-case") {
+                            AddTemplateCell(
+                                onClick = { Navigation.navigateTo(Screen.CaseScreenRoute()) },
+                                previewWidth = previewWidth,
+                                title = "Добавить дело",
+                                caption = "Новое дело"
+                            )
+                        }
+                        items(cases, key = { it.id }) { documentCase ->
+                            CasePreviewCard(
+                                documentCase = documentCase,
+                                previewWidth = previewWidth,
+                                onOpen = {
+                                    Navigation.navigateTo(Screen.CaseScreenRoute(documentCase.id))
+                                },
+                                onDelete = {
+                                    caseManager.deleteDocument(id = documentCase.id)
+                                    cases.remove(documentCase)
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -422,7 +485,9 @@ private fun RecentDocumentRow(
 @Composable
 private fun AddTemplateCell(
     onClick: () -> Unit,
-    previewWidth: Dp?
+    previewWidth: Dp?,
+    title: String,
+    caption: String
 ) {
     val compact = previewWidth != null
     Column(
@@ -439,7 +504,7 @@ private fun AddTemplateCell(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "Добавить шаблон",
+                text = title,
                 color = Color(0xFF555555),
                 fontSize = if (compact) 11.sp else 14.sp,
                 fontWeight = FontWeight.Medium
@@ -447,12 +512,99 @@ private fun AddTemplateCell(
         }
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "Новый шаблон",
+            text = caption,
             fontSize = if (compact) 12.sp else 13.sp,
             color = Color.Black,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
+    }
+}
+
+@Composable
+private fun CasePreviewCard(
+    documentCase: DocumentCase,
+    previewWidth: Dp?,
+    onOpen: () -> Unit,
+    onDelete: () -> Unit
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    val cardWidthModifier =
+        if (previewWidth != null) Modifier.width(previewWidth) else Modifier.fillMaxWidth()
+    val templateCount = documentCase.templateIds.size
+    val templatesLabel = when {
+        templateCount % 10 == 1 && templateCount % 100 != 11 -> "$templateCount шаблон"
+        templateCount % 10 in 2..4 && templateCount % 100 !in 12..14 -> "$templateCount шаблона"
+        else -> "$templateCount шаблонов"
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = cardWidthModifier
+                .aspectRatio(0.72f)
+                .shadow(3.dp, RoundedCornerShape(4.dp))
+                .clip(RoundedCornerShape(4.dp))
+                .background(Color.White)
+                .border(1.dp, CardBorder, RoundedCornerShape(4.dp))
+                .clickable(onClick = onOpen),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = documentCase.name.ifBlank { "Дело" },
+                    fontSize = if (previewWidth != null) 12.sp else 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.Black,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 10.dp)
+                )
+                Text(
+                    text = templatesLabel,
+                    fontSize = if (previewWidth != null) 10.sp else 13.sp,
+                    color = Color.Black.copy(alpha = 0.55f),
+                    modifier = Modifier.padding(top = 6.dp)
+                )
+            }
+        }
+        Row(
+            modifier = cardWidthModifier.padding(top = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = documentCase.name.ifBlank { "Дело" },
+                fontSize = 13.sp,
+                color = Color.Black,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Box {
+                Text(
+                    text = "⋮",
+                    fontSize = 16.sp,
+                    color = Color.Black.copy(alpha = 0.7f),
+                    modifier = Modifier
+                        .clickable { menuExpanded = true }
+                        .padding(start = 4.dp)
+                )
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Удалить") },
+                        onClick = {
+                            menuExpanded = false
+                            onDelete()
+                        }
+                    )
+                }
+            }
+        }
     }
 }
 

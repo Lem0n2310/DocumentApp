@@ -42,10 +42,17 @@ import org.example.documenteditordesktop.ClassesViewModels.Screen
 import org.example.documenteditordesktop.ClassesViewModels.SettingsManager
 import org.example.documenteditordesktop.ClassesViewModels.DocumentTemplate
 import org.example.documenteditordesktop.ClassesViewModels.Manager
+import org.example.documenteditordesktop.functions.saveAnswersToCase
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TemplateInput(templates: List<DocumentTemplate>, templateId: Int, dict: Map<String, String>? = null) {
+fun TemplateInput(
+    templates: List<DocumentTemplate>,
+    templateId: Int,
+    dict: Map<String, String>? = null,
+    returnTo: Screen? = null,
+    caseId: Int? = null
+) {
     val coroutineScope = rememberCoroutineScope()
 
     // вьюхи
@@ -101,7 +108,13 @@ fun TemplateInput(templates: List<DocumentTemplate>, templateId: Int, dict: Map<
         }
     }
 
+    fun persistCaseAnswers() {
+        val id = caseId ?: return
+        saveAnswersToCase(id, templateId, fieldViewModel.fieldValues.toMap())
+    }
+
     suspend fun saveDocument() {
+        persistCaseAnswers()
         val ok = saveViewModel.save(
             selectedTemplate = selectedTemplate,
             fieldValues = fieldViewModel.fieldValues,
@@ -252,7 +265,10 @@ fun TemplateInput(templates: List<DocumentTemplate>, templateId: Int, dict: Map<
             actionIconContentColor = Color.White
         ),
         navigationIcon = {
-            IconButton(onClick = { Navigation.navigateTo(Screen.MainScreenRoute) }) {
+            IconButton(onClick = {
+                persistCaseAnswers()
+                Navigation.navigateTo(returnTo ?: Screen.MainScreenRoute)
+            }) {
                 Icon(
                     imageVector = AppIcons.ArrowBack,
                     contentDescription = null

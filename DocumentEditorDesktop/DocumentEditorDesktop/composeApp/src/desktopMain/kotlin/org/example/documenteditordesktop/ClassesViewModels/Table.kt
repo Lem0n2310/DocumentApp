@@ -51,6 +51,33 @@ data class DocumentTemplate(
     )
 }
 
+@Serializable
+data class TypicalQuestion(
+    var questions: MutableList<String> = mutableListOf(),
+    var answer: String = ""
+) {
+    constructor() : this(mutableListOf(), "")
+}
+
+@Serializable
+data class TemplateAnswers(
+    var templateId: Int = 0,
+    var values: MutableMap<String, String> = mutableMapOf()
+) {
+    constructor() : this(0, mutableMapOf())
+}
+
+@Serializable
+data class DocumentCase(
+    var id: Int = 0,
+    var name: String = "",
+    var templateIds: MutableList<Int> = mutableListOf(),
+    var typicalQuestions: MutableList<TypicalQuestion> = mutableListOf(),
+    var filledTemplates: MutableList<TemplateAnswers> = mutableListOf()
+) {
+    constructor() : this(0, "", mutableListOf(), mutableListOf(), mutableListOf())
+}
+
 class Manager<T: Any>(
     val documentType: Class<T>
 ){
@@ -58,6 +85,7 @@ class Manager<T: Any>(
     private val documentFile = when (documentType) {
         DocumentTemplate::class.java -> File(documentDir,"Templates.json")
         RecentDocument::class.java -> File(documentDir, "RecentDocs.json")
+        DocumentCase::class.java -> File(documentDir, "Cases.json")
         else -> throw IllegalArgumentException("Unsupported document type")
     }
     var documents: MutableList<T> = loadJson()
@@ -110,7 +138,27 @@ class Manager<T: Any>(
                 (documents as MutableList<DocumentTemplate>).removeAll { it.id == id }
                 saveJson()
             }
+            DocumentCase::class.java -> {
+                (documents as MutableList<DocumentCase>).removeAll { it.id == id }
+                saveJson()
+            }
         }
+    }
+
+    fun updateById(id: Int, document: T) {
+        val index = documents.indexOfFirst { item ->
+            when (item) {
+                is DocumentCase -> item.id == id
+                is DocumentTemplate -> item.id == id
+                else -> false
+            }
+        }
+        if (index >= 0) {
+            documents[index] = document
+        } else {
+            documents.add(document)
+        }
+        saveJson()
     }
 
     fun clear(){
