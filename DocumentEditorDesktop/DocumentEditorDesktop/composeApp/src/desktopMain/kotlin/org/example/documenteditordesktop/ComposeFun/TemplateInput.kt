@@ -77,10 +77,10 @@ fun TemplateInput(templates: List<DocumentTemplate>, templateId: Int, dict: Map<
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("Шаблон не найден (возможно, удалён)")
                 Button(
-                    onClick = { Navigation.navigateTo(Screen.TemplatePickRoute) },
+                    onClick = { Navigation.navigateTo(Screen.MainScreenRoute) },
                     modifier = Modifier.padding(top = 16.dp)
                 ) {
-                    Text("К списку шаблонов")
+                    Text("На главный экран")
                 }
             }
         }
@@ -252,7 +252,7 @@ fun TemplateInput(templates: List<DocumentTemplate>, templateId: Int, dict: Map<
             actionIconContentColor = Color.White
         ),
         navigationIcon = {
-            IconButton(onClick = { Navigation.navigateTo(Screen.TemplatePickRoute) }) {
+            IconButton(onClick = { Navigation.navigateTo(Screen.MainScreenRoute) }) {
                 Icon(
                     imageVector = AppIcons.ArrowBack,
                     contentDescription = null
