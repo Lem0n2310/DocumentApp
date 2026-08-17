@@ -2,6 +2,7 @@ package org.example.documenteditordesktop
 
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import com.example.documenteditor.ClassesViewModels.templates
@@ -40,6 +41,7 @@ fun main() = application {
     Window(
         onCloseRequest = ::exitApplication,
         title = "documenteditordesktop",
+        icon = painterResource("app_logo.png"),
     ) {
         // Main.immediate: на Desktop collectAsState иначе лишний раз диспатчит
         // и при смене экрана/hot reload ломает animateAsState (Material3).
