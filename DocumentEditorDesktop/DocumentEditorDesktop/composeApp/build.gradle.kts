@@ -79,6 +79,7 @@ compose.desktop {
             packageVersion = "1.0.2"
 
             windows{
+                iconFile.set(project.file("icons/windows.ico"))
                 dirChooser = false
                 menu = true
                 shortcut = true
