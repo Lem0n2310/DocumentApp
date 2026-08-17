@@ -226,7 +226,7 @@ fun CaseScreen(caseId: Int?) {
                         )
                     }
                 } else {
-                    items(templates, key = { it.id }) { template ->
+                    items(templates, key = { "${it.id}#${System.identityHashCode(it)}" }) { template ->
                         val selected = template.id in selectedIds
                         val answers = answersFor(template)
                         val filled = selected && isTemplateFullyFilled(template, answers)
