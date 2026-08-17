@@ -91,11 +91,11 @@ class Manager<T: Any>(
     var documents: MutableList<T> = loadJson()
 
     fun loadJson(): MutableList<T>{
-        return if(documentFile.exists()) {
+        return if (documentFile.exists()) {
             val json = documentFile.readText()
             val type = TypeToken.getParameterized(MutableList::class.java, documentType).type
-            return Gson().fromJson(json, type) ?: mutableListOf()
-        }else{
+            Gson().fromJson<MutableList<T>>(json, type) ?: mutableListOf()
+        } else {
             createDocFile()
         }
     }
@@ -121,7 +121,7 @@ class Manager<T: Any>(
     fun addDocument(document: T){
         if (documentType == RecentDocument::class.java) {
             documents.add(0, document)
-        }else{
+        } else {
             documents.add(document)
         }
         saveJson()
@@ -130,16 +130,27 @@ class Manager<T: Any>(
     fun deleteDocument(name: String = "", id: Int = 0){
         when(documentType){
             RecentDocument::class.java -> {
-                // Точное совпадение пути (раньше path.contains(name) удалял лишние записи)
-                (documents as MutableList<RecentDocument>).removeAll { it.path == name }
+                val list = documents as MutableList<RecentDocument>
+                val index = list.indexOfFirst { it.path == name }
+                if (index >= 0) {
+                    list.removeAt(index)
+                }
                 saveJson()
             }
             DocumentTemplate::class.java ->{
-                (documents as MutableList<DocumentTemplate>).removeAll { it.id == id }
+                val list = documents as MutableList<DocumentTemplate>
+                val index = list.indexOfFirst { it.id == id }
+                if (index >= 0) {
+                    list.removeAt(index)
+                }
                 saveJson()
             }
             DocumentCase::class.java -> {
-                (documents as MutableList<DocumentCase>).removeAll { it.id == id }
+                val list = documents as MutableList<DocumentCase>
+                val index = list.indexOfFirst { it.id == id }
+                if (index >= 0) {
+                    list.removeAt(index)
+                }
                 saveJson()
             }
         }

@@ -179,7 +179,7 @@ fun MainScreen() {
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                         contentPadding = PaddingValues(bottom = 8.dp)
                     ) {
-                        items(recentDocs, key = { it.path }) { document ->
+                        items(recentDocs, key = { "${it.path}#${System.identityHashCode(it)}" }) { document ->
                             RecentDocumentRow(
                                 document = document,
                                 onOpenInEditor = {
@@ -272,7 +272,7 @@ fun MainScreen() {
                                 caption = "Новый шаблон"
                             )
                         }
-                        items(templates, key = { it.id }) { template ->
+                        items(templates, key = { "${it.id}#${System.identityHashCode(it)}" }) { template ->
                             TemplatePreviewCard(
                                 template = template,
                                 previewWidth = previewWidth,
@@ -353,7 +353,7 @@ fun MainScreen() {
                                 caption = "Новое дело"
                             )
                         }
-                        items(cases, key = { it.id }) { documentCase ->
+                        items(cases, key = { "${it.id}#${System.identityHashCode(it)}" }) { documentCase ->
                             CasePreviewCard(
                                 documentCase = documentCase,
                                 previewWidth = previewWidth,
