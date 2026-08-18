@@ -61,6 +61,7 @@ import org.example.documenteditordesktop.ClassesViewModels.TypicalQuestion
 import org.example.documenteditordesktop.functions.countMatchedFields
 import org.example.documenteditordesktop.functions.isTemplateFullyFilled
 import org.example.documenteditordesktop.functions.mergedAnswers
+import org.example.documenteditordesktop.functions.valueForField
 
 private val Background = Color(0xff9DA7E8)
 private val BarColor = Color(0xff8192fe)
@@ -230,7 +231,7 @@ fun CaseScreen(caseId: Int?) {
                         val selected = template.id in selectedIds
                         val answers = answersFor(template)
                         val filled = selected && isTemplateFullyFilled(template, answers)
-                        val filledCount = template.fields.count { answers[it.key]?.isNotBlank() == true }
+                        val filledCount = template.fields.count { valueForField(it, answers)?.isNotBlank() == true }
                         TemplateSelectRow(
                             template = template,
                             selected = selected,

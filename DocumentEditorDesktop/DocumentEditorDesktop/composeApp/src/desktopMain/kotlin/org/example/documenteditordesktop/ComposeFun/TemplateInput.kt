@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -42,7 +42,10 @@ import org.example.documenteditordesktop.ClassesViewModels.Screen
 import org.example.documenteditordesktop.ClassesViewModels.SettingsManager
 import org.example.documenteditordesktop.ClassesViewModels.DocumentTemplate
 import org.example.documenteditordesktop.ClassesViewModels.Manager
+import org.example.documenteditordesktop.functions.fieldDisplayKey
+import org.example.documenteditordesktop.functions.fieldLookupKeys
 import org.example.documenteditordesktop.functions.saveAnswersToCase
+import org.example.documenteditordesktop.functions.valueForField
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,18 +97,21 @@ fun TemplateInput(
         return
     }
 
-    LaunchedEffect(Unit) {
-        if (fieldViewModel.forFlag) {
-            selectedTemplate.fields.forEach { field ->
-                fieldViewModel.fieldValues[field.key] = ""
+    LaunchedEffect(templateId, dict) {
+        selectedTemplate.fields.forEachIndexed { index, field ->
+            val mapKey = fieldDisplayKey(field, index)
+            val value = dict?.let { valueForField(field, it) }.orEmpty()
+            val keys = fieldLookupKeys(field).ifEmpty { listOf(mapKey) }
+            keys.forEach { key ->
+                if (key.isNotEmpty()) {
+                    fieldViewModel.fieldValues[key] = value
+                }
             }
-            fieldViewModel.forFlag = false
-        }
-        if (!dict.isNullOrEmpty()) {
-            selectedTemplate.fields.forEach { documentField ->
-                fieldViewModel.fieldValues[documentField.key] = dict[documentField.key] ?: ""
+            if (mapKey.isNotEmpty()) {
+                fieldViewModel.fieldValues[mapKey] = value
             }
         }
+        fieldViewModel.forFlag = false
     }
 
     fun persistCaseAnswers() {
@@ -240,12 +246,24 @@ fun TemplateInput(
                 .padding(top = 110.dp, bottom = 80.dp)
                 .imePadding()
         ) {
-            items(selectedTemplate.fields) { field ->
+            itemsIndexed(
+                selectedTemplate.fields,
+                key = { index, field -> "${index}-${fieldDisplayKey(field, index)}" }
+            ) { index, field ->
+                val mapKey = fieldDisplayKey(field, index)
                 TextField(
                     modifier = Modifier.padding(vertical = 10.dp),
-                    value = fieldViewModel.fieldValues[field.key] ?: "",
-                    onValueChange = {
-                        fieldViewModel.updateValue(key = field.key, value = it)
+                    value = fieldViewModel.fieldValues[mapKey] ?: "",
+                    onValueChange = { newValue ->
+                        val keys = fieldLookupKeys(field).ifEmpty { listOf(mapKey) }
+                        keys.forEach { key ->
+                            if (key.isNotEmpty()) {
+                                fieldViewModel.updateValue(key = key, value = newValue)
+                            }
+                        }
+                        if (mapKey.isNotEmpty()) {
+                            fieldViewModel.updateValue(key = mapKey, value = newValue)
+                        }
                     },
                     label = { Text(field.label) },
                     singleLine = false,
