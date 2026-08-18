@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
@@ -60,76 +61,134 @@ private data class HighlightRange(
     val color: Color,
 )
 
-/** Палитра цветов полей: каждому полю — свой устойчивый цвет */
-private val FIELD_COLORS = listOf(
-    Color(0xFF81C784), // зелёный — удобно для ФИО
-    Color(0xFFFFF176), // жёлтый — адрес и т.п.
-    Color(0xFF64B5F6), // синий
-    Color(0xFFFFB74D), // оранжевый
-    Color(0xFFCE93D8), // сиреневый
-    Color(0xFF4DB6AC), // бирюзовый
-    Color(0xFFE57373), // красный
-    Color(0xFFA1887F), // коричневый
-)
+/**
+ * Палитра цветов вопросов: генерируется в HSL с шагом «золотого угла»,
+ * чтобы соседние вопросы визуально отличались как можно сильнее.
+ * Первые [FIELD_COLORS.size] вопросов — уникальные цвета, дальше цикл.
+ */
+private fun hslToColor(hDeg: Float, s: Float, l: Float): Color {
+    val h = ((hDeg % 360f) + 360f) % 360f / 360f
+    if (s <= 0f) {
+        return Color(l, l, l)
+    }
+    fun hue2rgb(p: Float, q: Float, tIn: Float): Float {
+        var t = tIn
+        if (t < 0f) t += 1f
+        if (t > 1f) t -= 1f
+        return when {
+            t < 1f / 6f -> p + (q - p) * 6f * t
+            t < 1f / 2f -> q
+            t < 2f / 3f -> p + (q - p) * (2f / 3f - t) * 6f
+            else -> p
+        }
+    }
+    val q = if (l < 0.5f) l * (1f + s) else l + s - l * s
+    val p = 2f * l - q
+    val r = hue2rgb(p, q, h + 1f / 3f)
+    val g = hue2rgb(p, q, h)
+    val b = hue2rgb(p, q, h - 1f / 3f)
+    return Color(r.coerceIn(0f, 1f), g.coerceIn(0f, 1f), b.coerceIn(0f, 1f))
+}
+
+/** ~180 различимых пастельных оттенков, удобных как фон под чёрный текст */
+private val FIELD_COLORS: List<Color> = buildList {
+    val count = 180
+    val goldenAngle = 137.508f
+    val saturations = floatArrayOf(0.62f, 0.78f, 0.50f, 0.70f)
+    val lightnesses = floatArrayOf(0.72f, 0.64f, 0.78f, 0.68f, 0.58f)
+    for (i in 0 until count) {
+        val hue = (i * goldenAngle) % 360f
+        val s = saturations[i % saturations.size]
+        val l = lightnesses[i % lightnesses.size]
+        add(hslToColor(hue, s, l))
+    }
+}
 
 private fun colorForFieldIndex(index: Int): Color =
     FIELD_COLORS[index.mod(FIELD_COLORS.size)]
 
-private fun fieldColorMap(
-    fields: Map<DocumentField, *>
-): Map<DocumentField, Color> =
-    fields.keys.mapIndexed { index, field -> field to colorForFieldIndex(index) }.toMap()
+/** Нормализация текста вопроса для привязки цвета */
+private fun normalizeQuestion(label: String): String =
+    label.trim().lowercase()
+
+/**
+ * Цвет по тексту вопроса. Индекс закрепляется за нормализованным label
+ * при первом сохранении и больше не меняется.
+ */
+private fun bindQuestionColor(
+    label: String,
+    questionColorIndices: MutableMap<String, Int>,
+): Color {
+    val key = normalizeQuestion(label)
+    if (key.isEmpty()) return FIELD_COLORS[0]
+    val index = questionColorIndices.getOrPut(key) { questionColorIndices.size }
+    return colorForFieldIndex(index)
+}
+
+/** Цвет вопроса без записи в карту (для превью при наборе текста). */
+private fun peekQuestionColor(
+    label: String,
+    questionColorIndices: Map<String, Int>,
+): Color {
+    val key = normalizeQuestion(label)
+    if (key.isEmpty()) return colorForFieldIndex(questionColorIndices.size)
+    questionColorIndices[key]?.let { return colorForFieldIndex(it) }
+    return colorForFieldIndex(questionColorIndices.size)
+}
 
 private fun rangesOverlap(aStart: Int, aEnd: Int, bStart: Int, bEnd: Int): Boolean =
     aStart < bEnd && bStart < aEnd
+
+private fun buildHighlightedAnnotated(
+    text: String,
+    highlights: List<HighlightRange>,
+): AnnotatedString = buildAnnotatedString {
+    if (highlights.isEmpty()) {
+        append(text)
+        return@buildAnnotatedString
+    }
+    val sorted = highlights
+        .filter { it.start in 0 until text.length && it.end in 1..text.length && it.start < it.end }
+        .sortedBy { it.start }
+
+    var cursor = 0
+    for (h in sorted) {
+        val start = maxOf(h.start, cursor)
+        if (start > cursor) {
+            append(text.substring(cursor, start))
+        }
+        if (h.end > start) {
+            withStyle(
+                SpanStyle(
+                    background = h.color.copy(alpha = 0.55f),
+                    color = Color(0xFF1A1A1A),
+                )
+            ) {
+                append(text.substring(start, h.end))
+            }
+            cursor = h.end
+        }
+    }
+    if (cursor < text.length) {
+        append(text.substring(cursor))
+    }
+}
 
 private fun buildHighlightedValue(
     text: String,
     highlights: List<HighlightRange>,
     selection: TextRange,
-): TextFieldValue {
-    val annotated = buildAnnotatedString {
-        if (highlights.isEmpty()) {
-            append(text)
-            return@buildAnnotatedString
-        }
-        val sorted = highlights
-            .filter { it.start in 0 until text.length && it.end in 1..text.length && it.start < it.end }
-            .sortedBy { it.start }
-
-        var cursor = 0
-        for (h in sorted) {
-            val start = maxOf(h.start, cursor)
-            if (start > cursor) {
-                append(text.substring(cursor, start))
-            }
-            if (h.end > start) {
-                withStyle(
-                    SpanStyle(
-                        background = h.color.copy(alpha = 0.55f),
-                        color = Color(0xFF1A1A1A),
-                    )
-                ) {
-                    append(text.substring(start, h.end))
-                }
-                cursor = h.end
-            }
-        }
-        if (cursor < text.length) {
-            append(text.substring(cursor))
-        }
-    }
-    return TextFieldValue(annotated, selection)
-}
+): TextFieldValue = TextFieldValue(buildHighlightedAnnotated(text, highlights), selection)
 
 /**
  * Собирает подсветки для текстового блока [blockId]
  * или для ячейки таблицы (если заданы row/col).
+ * Цвет берётся по тексту вопроса (label).
  */
 private fun collectHighlights(
     blockId: Int,
     fields: Map<DocumentField, Map<List<Int>, String>>,
-    fieldColors: Map<DocumentField, Color>,
+    questionColorIndices: MutableMap<String, Int>,
     inProgressFragments: Map<List<Int>, String>,
     inProgressColor: Color,
     skipFieldLabel: String? = null,
@@ -137,6 +196,7 @@ private fun collectHighlights(
     colId: Int = -1,
 ): List<HighlightRange> {
     val result = mutableListOf<HighlightRange>()
+    val skipKey = skipFieldLabel?.let { normalizeQuestion(it) }
 
     fun matchesKey(key: List<Int>): Boolean {
         return if (rowId >= 0 && colId >= 0) {
@@ -151,8 +211,8 @@ private fun collectHighlights(
     }
 
     fields.forEach { (field, fragments) ->
-        if (skipFieldLabel != null && field.label == skipFieldLabel) return@forEach
-        val color = fieldColors[field] ?: colorForFieldIndex(0)
+        if (skipKey != null && normalizeQuestion(field.label) == skipKey) return@forEach
+        val color = bindQuestionColor(field.label, questionColorIndices)
         fragments.forEach { (key, _) ->
             if (matchesKey(key)) {
                 val (start, end) = rangeFromKey(key)
@@ -169,32 +229,6 @@ private fun collectHighlights(
     }
 
     return result
-}
-
-private fun cellHighlightColor(
-    tableId: Int,
-    rowId: Int,
-    colId: Int,
-    fields: Map<DocumentField, Map<List<Int>, String>>,
-    fieldColors: Map<DocumentField, Color>,
-    inProgressFragments: Map<List<Int>, String>,
-    inProgressColor: Color,
-    skipFieldLabel: String? = null,
-): Color? {
-    fields.forEach { (field, fragments) ->
-        if (skipFieldLabel != null && field.label == skipFieldLabel) return@forEach
-        fragments.keys.forEach { key ->
-            if (key.size == 5 && key[0] == tableId && key[1] == rowId && key[2] == colId) {
-                return fieldColors[field]
-            }
-        }
-    }
-    inProgressFragments.keys.forEach { key ->
-        if (key.size == 5 && key[0] == tableId && key[1] == rowId && key[2] == colId) {
-            return inProgressColor
-        }
-    }
-    return null
 }
 
 /** Проверяет, пересекается ли новый диапазон с уже занятыми фрагментами в том же блоке/ячейке */
@@ -226,7 +260,11 @@ private fun isRangeTaken(
         return false
     }
     fields.forEach { (field, fragments) ->
-        if (skipFieldLabel != null && field.label == skipFieldLabel) return@forEach
+        if (skipFieldLabel != null &&
+            normalizeQuestion(field.label) == normalizeQuestion(skipFieldLabel)
+        ) {
+            return@forEach
+        }
         if (check(fragments)) return true
     }
     return check(inProgressFragments)
@@ -354,7 +392,7 @@ private fun TextBlockEditor(
 private fun TableEditor(
     element: TemplateElement.Table,
     onCellClick: (Int, Int) -> Unit,
-    cellColors: Map<Pair<Int, Int>, Color> = emptyMap(),
+    cellHighlights: Map<Pair<Int, Int>, List<HighlightRange>> = emptyMap(),
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -363,18 +401,20 @@ private fun TableEditor(
         element.rows.forEachIndexed { rowIdx, row ->
             Row {
                 row.forEachIndexed { colIdx, cell ->
-                    val highlight = cellColors[rowIdx to colIdx]
+                    val highlights = cellHighlights[rowIdx to colIdx].orEmpty()
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .padding(4.dp)
                             .border(1.dp, Color.Gray)
-                            .background(highlight?.copy(alpha = 0.45f) ?: Color.Transparent)
                             .clickable {
                                 onCellClick(rowIdx, colIdx)
                             }
                     ) {
-                        Text(text = cell, modifier = Modifier.padding(8.dp))
+                        Text(
+                            text = buildHighlightedAnnotated(cell, highlights),
+                            modifier = Modifier.padding(8.dp)
+                        )
                     }
                 }
             }
@@ -425,6 +465,7 @@ private fun TableCellFieldDialog(
     highlights: List<HighlightRange> = emptyList(),
     fields: Map<DocumentField, Map<List<Int>, String>> = emptyMap(),
     skipFieldLabel: String? = null,
+    inProgressColor: Color = Color(0xFF90CAF9),
     closeDialog: (Boolean) -> Unit,
     getChanges: (SnapshotStateMap<List<Int>, String>) -> Unit
 ) {
@@ -434,10 +475,10 @@ private fun TableCellFieldDialog(
     var fragmentStartId: Int? by remember { mutableStateOf(null) }
     var fragmentEndId: Int? by remember { mutableStateOf(null) }
 
-    val liveHighlights = remember(highlights, selectedFragments.toMap()) {
+    val liveHighlights = remember(highlights, selectedFragments.toMap(), inProgressColor) {
         highlights + selectedFragments.mapNotNull { (key, _) ->
             if (key.size == 5) {
-                HighlightRange(key[3], key[4], Color(0xFF90CAF9))
+                HighlightRange(key[3], key[4], inProgressColor)
             } else null
         }
     }
@@ -486,7 +527,7 @@ private fun TableCellFieldDialog(
         title = {},
         text = {
             Row {
-                Box(modifier = Modifier.weight(0.7f)) {
+                Box(Modifier.weight(0.7f)) {
                     TextBlockEditor(
                         element = element,
                         rowId = rowId,
@@ -503,7 +544,7 @@ private fun TableCellFieldDialog(
                     )
                 }
 
-                LazyColumn(modifier = Modifier.weight(0.3f)) {
+                LazyColumn(Modifier.weight(0.3f)) {
                     item { Text("Выделенный текст:", modifier = Modifier.padding(top = 12.dp)) }
 
                     items(selectedFragments.toList()) { (_, selectedText) ->
@@ -512,7 +553,7 @@ private fun TableCellFieldDialog(
                                 selectedText,
                                 modifier = Modifier
                                     .padding(8.dp)
-                                    .background(Color(0xFF90CAF9).copy(alpha = 0.55f))
+                                    .background(inProgressColor.copy(alpha = 0.55f))
                                     .padding(4.dp)
                             )
                         }
@@ -536,7 +577,7 @@ fun LeftSide(
     modifier: Modifier,
     templateState: TemplateState,
     fields: Map<DocumentField, SnapshotStateMap<List<Int>, String>>,
-    fieldColors: Map<DocumentField, Color>,
+    questionColorIndices: SnapshotStateMap<String, Int>,
     selectedFragments: SnapshotStateMap<List<Int>, String>,
     inProgressColor: Color,
     skipFieldLabel: String?,
@@ -573,7 +614,7 @@ fun LeftSide(
                     val highlights = collectHighlights(
                         blockId = element.id,
                         fields = fields,
-                        fieldColors = fieldColors,
+                        questionColorIndices = questionColorIndices,
                         inProgressFragments = selectedFragments,
                         inProgressColor = inProgressColor,
                         skipFieldLabel = skipFieldLabel,
@@ -590,25 +631,28 @@ fun LeftSide(
                 }
 
                 is TemplateElement.Table -> {
-                    val cellColors = buildMap {
+                    val cellHighlights = buildMap {
                         element.rows.forEachIndexed { rowIdx, row ->
                             row.indices.forEach { colIdx ->
-                                cellHighlightColor(
-                                    tableId = element.id,
-                                    rowId = rowIdx,
-                                    colId = colIdx,
+                                val highlights = collectHighlights(
+                                    blockId = element.id,
                                     fields = fields,
-                                    fieldColors = fieldColors,
+                                    questionColorIndices = questionColorIndices,
                                     inProgressFragments = selectedFragments,
                                     inProgressColor = inProgressColor,
                                     skipFieldLabel = skipFieldLabel,
-                                )?.let { put(rowIdx to colIdx, it) }
+                                    rowId = rowIdx,
+                                    colId = colIdx,
+                                )
+                                if (highlights.isNotEmpty()) {
+                                    put(rowIdx to colIdx, highlights)
+                                }
                             }
                         }
                     }
                     TableEditor(
                         element = element,
-                        cellColors = cellColors,
+                        cellHighlights = cellHighlights,
                         onCellClick = { rowIdx, colIdx ->
                             selectedRow = rowIdx
                             selectedCol = colIdx
@@ -626,7 +670,7 @@ fun LeftSide(
         val dialogHighlights = collectHighlights(
             blockId = curElement.id,
             fields = fields,
-            fieldColors = fieldColors,
+            questionColorIndices = questionColorIndices,
             inProgressFragments = selectedFragments,
             inProgressColor = inProgressColor,
             skipFieldLabel = skipFieldLabel,
@@ -640,6 +684,7 @@ fun LeftSide(
             highlights = dialogHighlights,
             fields = fields,
             skipFieldLabel = skipFieldLabel,
+            inProgressColor = inProgressColor,
             closeDialog = { value ->
                 showDialog = value
             },
@@ -662,7 +707,7 @@ fun RightSide(
     currentStartId: Int?,
     currentEndId: Int?,
     fields: SnapshotStateMap<DocumentField, SnapshotStateMap<List<Int>, String>>,
-    fieldColors: Map<DocumentField, Color>,
+    questionColorIndices: SnapshotStateMap<String, Int>,
     inProgressColor: Color,
     addField: (Boolean) -> Unit,
     editorFlagChange: (Boolean) -> Unit,
@@ -761,7 +806,7 @@ fun RightSide(
             } else {
                 if (fields.isNotEmpty()) {
                     items(fields.keys.toList()) { field ->
-                        val color = fieldColors[field] ?: Color.LightGray
+                        val color = bindQuestionColor(field.label, questionColorIndices)
                         Button(
                             modifier = Modifier
                                 .padding(10.dp)
@@ -789,13 +834,9 @@ fun RightSide(
         if (editorFlag) {
             Button(
                 onClick = {
-                    if (hint.isBlank() || selectedFragments.isEmpty()) {
+                    if (hint.isBlank()) {
                         return@Button
                     }
-                    val documentField = DocumentField(
-                        label = hint,
-                        key = "{{${hint.uppercase().transliterateRussian().replaceSpacesWithUnderscores()}}}"
-                    )
                     if (currentSelectedText.isNotBlank() &&
                         currentTextBlockId != null &&
                         currentStartId != null &&
@@ -809,11 +850,14 @@ fun RightSide(
                         )
                         currentSelectedTextChange("")
                     }
-                    // После возможного onAddFragment ещё раз проверяем: если фрагмент
-                    // не добавился из‑за пересечения и список пуст — не сохраняем поле.
                     if (selectedFragments.isEmpty()) {
                         return@Button
                     }
+                    val documentField = DocumentField(
+                        label = hint,
+                        key = "{{${hint.uppercase().transliterateRussian().replaceSpacesWithUnderscores()}}}"
+                    )
+                    bindQuestionColor(hint, questionColorIndices)
                     getDocField(documentField, selectedFragments)
                     editorFlagChange(false)
                 },
@@ -847,6 +891,7 @@ fun TemplateEditorScreen(file: File) {
     val manager = Manager<DocumentTemplate>(DocumentTemplate::class.java)
 
     val fields = remember { mutableStateMapOf<DocumentField, SnapshotStateMap<List<Int>, String>>() }
+    val questionColorIndices = remember { mutableStateMapOf<String, Int>() }
 
     var editorFlag by remember { mutableStateOf(false) }
     var currentHint by remember { mutableStateOf("") }
@@ -856,12 +901,8 @@ fun TemplateEditorScreen(file: File) {
 
     val selectedFragments = remember { mutableStateMapOf<List<Int>, String>() }
 
-    val fieldColors = remember(fields.keys.toList()) { fieldColorMap(fields) }
     val skipFieldLabel = if (editorFlag) currentHint.ifBlank { null } else null
-    val inProgressColor = remember(editingField, fieldColors, fields.size, editorFlag) {
-        editingField?.let { fieldColors[it] }
-            ?: colorForFieldIndex(fields.size)
-    }
+    val inProgressColor = peekQuestionColor(currentHint, questionColorIndices)
 
     Scaffold(
         topBar = {
@@ -956,7 +997,7 @@ fun TemplateEditorScreen(file: File) {
                         modifier = Modifier.weight(0.7f),
                         templateState = templateState,
                         fields = fields,
-                        fieldColors = fieldColors,
+                        questionColorIndices = questionColorIndices,
                         selectedFragments = selectedFragments,
                         inProgressColor = inProgressColor,
                         skipFieldLabel = skipFieldLabel,
@@ -981,7 +1022,7 @@ fun TemplateEditorScreen(file: File) {
                         currentStartId = fragmentStartId,
                         currentEndId = fragmentEndId,
                         fields = fields,
-                        fieldColors = fieldColors,
+                        questionColorIndices = questionColorIndices,
                         inProgressColor = inProgressColor,
                         addField = { flag ->
                             editingField = null
@@ -1044,6 +1085,7 @@ fun TemplateEditorScreen(file: File) {
                         editorFlag = true
                         currentHint = hint
                         editingField = null
+                        bindQuestionColor(hint, questionColorIndices)
                         showAddDocumentFieldDialog = false
                     },
                     onDismiss = { showAddDocumentFieldDialog = false }
