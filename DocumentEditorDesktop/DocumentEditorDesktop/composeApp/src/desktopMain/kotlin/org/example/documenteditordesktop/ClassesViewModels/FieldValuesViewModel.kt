@@ -10,6 +10,7 @@ class FieldValuesViewModel {
     val fieldValues =  mutableStateMapOf<String, String>()
 
     fun updateValue(key: String, value: String){ // Обновление данных
+        if (key.isEmpty()) return
         fieldValues[key] = value
     }
 
