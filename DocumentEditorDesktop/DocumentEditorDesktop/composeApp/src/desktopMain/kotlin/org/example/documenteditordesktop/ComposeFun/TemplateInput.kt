@@ -4,14 +4,20 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -29,23 +35,30 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.documenteditor.ClassesViewModels.FieldValuesViewModel
 import com.example.documenteditor.ClassesViewModels.SaveViewModel
 import com.example.documenteditor.functions.isFull
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.example.documenteditordesktop.ClassesViewModels.AppIcons
+import org.example.documenteditordesktop.ClassesViewModels.DocumentField
+import org.example.documenteditordesktop.ClassesViewModels.DocumentTemplate
+import org.example.documenteditordesktop.ClassesViewModels.Manager
 import org.example.documenteditordesktop.ClassesViewModels.Navigation
 import org.example.documenteditordesktop.ClassesViewModels.Screen
 import org.example.documenteditordesktop.ClassesViewModels.SettingsManager
-import org.example.documenteditordesktop.ClassesViewModels.DocumentTemplate
-import org.example.documenteditordesktop.ClassesViewModels.Manager
 import org.example.documenteditordesktop.functions.fieldDisplayKey
 import org.example.documenteditordesktop.functions.fieldLookupKeys
 import org.example.documenteditordesktop.functions.saveAnswersToCase
 import org.example.documenteditordesktop.functions.valueForField
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -112,6 +125,29 @@ fun TemplateInput(
             }
         }
         fieldViewModel.forFlag = false
+    }
+
+    var templateState by remember { mutableStateOf<TemplateState?>(null) }
+    var documentLoaded by remember { mutableStateOf(false) }
+    var selectedFieldIndex by remember { mutableStateOf<Int?>(null) }
+    val focusRequesters = remember(selectedTemplate.fields.size) {
+        List(selectedTemplate.fields.size) { FocusRequester() }
+    }
+
+    LaunchedEffect(selectedTemplate.nameForDevelop) {
+        documentLoaded = false
+        templateState = withContext(Dispatchers.IO) {
+            val file = File(
+                System.getProperty("user.home"),
+                "DocumentEditor/Templates/${selectedTemplate.nameForDevelop}.docx"
+            )
+            if (!file.exists()) {
+                null
+            } else {
+                runCatching { parseDocxFile(file) }.getOrNull()
+            }
+        }
+        documentLoaded = true
     }
 
     fun persistCaseAnswers() {
@@ -240,37 +276,60 @@ fun TemplateInput(
                 }
             )
         }
-        LazyColumn(
-            horizontalAlignment = Alignment.CenterHorizontally,
+        Row(
             modifier = Modifier
-                .padding(top = 110.dp, bottom = 80.dp)
+                .fillMaxSize()
+                .padding(top = 64.dp)
                 .imePadding()
         ) {
-            itemsIndexed(
-                selectedTemplate.fields,
-                key = { index, field -> "${index}-${fieldDisplayKey(field, index)}" }
-            ) { index, field ->
-                val mapKey = fieldDisplayKey(field, index)
-                TextField(
-                    modifier = Modifier.padding(vertical = 10.dp),
-                    value = fieldViewModel.fieldValues[mapKey] ?: "",
-                    onValueChange = { newValue ->
-                        val keys = fieldLookupKeys(field).ifEmpty { listOf(mapKey) }
-                        keys.forEach { key ->
-                            if (key.isNotEmpty()) {
-                                fieldViewModel.updateValue(key = key, value = newValue)
+            Box(
+                modifier = Modifier
+                    .weight(0.68f)
+                    .fillMaxHeight()
+                    .padding(12.dp)
+                    .background(Color.White),
+                contentAlignment = Alignment.Center
+            ) {
+                val parsed = templateState
+                when {
+                    !documentLoaded -> CircularProgressIndicator()
+                    parsed == null || parsed.elements.isEmpty() -> {
+                        Text(
+                            "Не удалось загрузить документ шаблона",
+                            modifier = Modifier.padding(24.dp)
+                        )
+                    }
+                    else -> {
+                        DocumentFillPreview(
+                            templateState = parsed,
+                            fields = selectedTemplate.fields,
+                            fieldValues = fieldViewModel.fieldValues,
+                            selectedFieldIndex = selectedFieldIndex,
+                            onFieldClick = { index ->
+                                selectedFieldIndex = index
+                                if (index in focusRequesters.indices) {
+                                    runCatching { focusRequesters[index].requestFocus() }
+                                }
                             }
-                        }
-                        if (mapKey.isNotEmpty()) {
-                            fieldViewModel.updateValue(key = mapKey, value = newValue)
-                        }
-                    },
-                    label = { Text(field.label) },
-                    singleLine = false,
-                    minLines = 1,
-                    maxLines = 12
-                )
+                        )
+                    }
+                }
             }
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .fillMaxHeight()
+                    .background(Color(0xFF6F7BD1))
+            )
+            TemplateFieldsForm(
+                fields = selectedTemplate.fields,
+                fieldViewModel = fieldViewModel,
+                focusRequesters = focusRequesters,
+                onFieldFocused = { selectedFieldIndex = it },
+                modifier = Modifier
+                    .weight(0.32f)
+                    .fillMaxHeight()
+            )
         }
     }
 
@@ -318,4 +377,62 @@ fun TemplateInput(
             }
         }
     )
+}
+
+@Composable
+private fun TemplateFieldsForm(
+    fields: List<DocumentField>,
+    fieldViewModel: FieldValuesViewModel,
+    focusRequesters: List<FocusRequester>,
+    onFieldFocused: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        itemsIndexed(
+            fields,
+            key = { index, field -> "${index}-${fieldDisplayKey(field, index)}" }
+        ) { index, field ->
+            val mapKey = fieldDisplayKey(field, index)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 18.dp)
+                        .size(12.dp)
+                        .background(colorForFieldIndex(index))
+                )
+                Spacer(Modifier.width(8.dp))
+                TextField(
+                    modifier = Modifier
+                        .weight(1f)
+                        .focusRequester(focusRequesters[index])
+                        .onFocusChanged { state ->
+                            if (state.isFocused) onFieldFocused(index)
+                        },
+                    value = fieldViewModel.fieldValues[mapKey] ?: "",
+                    onValueChange = { newValue ->
+                        val keys = fieldLookupKeys(field).ifEmpty { listOf(mapKey) }
+                        keys.forEach { key ->
+                            if (key.isNotEmpty()) {
+                                fieldViewModel.updateValue(key = key, value = newValue)
+                            }
+                        }
+                        if (mapKey.isNotEmpty()) {
+                            fieldViewModel.updateValue(key = mapKey, value = newValue)
+                        }
+                    },
+                    label = { Text(field.label) },
+                    singleLine = false,
+                    minLines = 1,
+                    maxLines = 12
+                )
+            }
+        }
+    }
 }

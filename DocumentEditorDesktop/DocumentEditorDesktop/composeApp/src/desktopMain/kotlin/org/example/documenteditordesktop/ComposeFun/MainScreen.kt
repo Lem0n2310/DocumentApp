@@ -32,7 +32,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -44,17 +43,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.documenteditor.ClassesViewModels.SaveViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import org.apache.poi.xwpf.usermodel.XWPFDocument
 import org.example.documenteditordesktop.ClassesViewModels.AppIcons
 import org.example.documenteditordesktop.ClassesViewModels.DocumentCase
 import org.example.documenteditordesktop.ClassesViewModels.DocumentTemplate
@@ -63,27 +59,24 @@ import org.example.documenteditordesktop.ClassesViewModels.Navigation
 import org.example.documenteditordesktop.ClassesViewModels.RecentDocument
 import org.example.documenteditordesktop.ClassesViewModels.Screen
 import org.example.documenteditordesktop.ClassesViewModels.TemplatePortable
+import org.example.documenteditordesktop.ComposeFun.CatalogCardBorder
+import org.example.documenteditordesktop.ComposeFun.CatalogHeader
+import org.example.documenteditordesktop.ComposeFun.CatalogPreviewMinSize
+import org.example.documenteditordesktop.ComposeFun.CatalogPreviewWidth
+import org.example.documenteditordesktop.ComposeFun.ListSort
+import org.example.documenteditordesktop.ComposeFun.TemplatePreviewCard
+import org.example.documenteditordesktop.ComposeFun.isAppFullScreen
+import org.example.documenteditordesktop.ComposeFun.searchAndSort
 import org.example.documenteditordesktop.functions.convertDocToDocx
 import java.awt.Desktop
 import java.io.File
-import java.io.FileInputStream
 
 private val SidebarColor = Color(0xff8192fe)
 private val MainBackground = Color(0xff9DA7E8)
 private val AddCellGray = Color(0xFFD6D6D6)
-private val CardBorder = Color(0xff8192fe)
-private val FullscreenPreviewMinSize = 170.dp
-private val WindowedPreviewWidth = 110.dp
+private val CardBorder = CatalogCardBorder
 
-@Composable
-private fun isAppFullScreen(): Boolean {
-    val windowSize = LocalWindowInfo.current.containerSize
-    val screen = remember {
-        java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
-    }
-    return windowSize.width >= (screen.width * 0.9).toInt() &&
-        windowSize.height >= (screen.height * 0.9).toInt()
-}
+private enum class HomeSection { Templates, Cases }
 
 @Composable
 fun MainScreen() {
@@ -103,8 +96,39 @@ fun MainScreen() {
         mutableStateListOf<DocumentCase>().apply { addAll(caseManager.loadJson()) }
     }
     var showAddTemplateDialog by remember { mutableStateOf(false) }
+    var expandedSection by remember { mutableStateOf<HomeSection?>(null) }
+    var templateQuery by remember { mutableStateOf("") }
+    var templateSort by remember { mutableStateOf(ListSort.Used) }
+    var caseQuery by remember { mutableStateOf("") }
+    var caseSort by remember { mutableStateOf(ListSort.Used) }
     val templateFolder = remember {
         File(System.getProperty("user.home"), "DocumentEditor/Templates")
+    }
+    val visibleTemplates = templates.searchAndSort(
+        query = templateQuery,
+        sort = templateSort,
+        nameOf = { it.nameForUser },
+        createdAt = { it.createdAt },
+        lastUsedAt = { it.lastUsedAt },
+        idOf = { it.id }
+    )
+    val visibleCases = cases.searchAndSort(
+        query = caseQuery,
+        sort = caseSort,
+        nameOf = { it.name },
+        createdAt = { it.createdAt },
+        lastUsedAt = { it.lastUsedAt },
+        idOf = { it.id }
+    )
+
+    fun markTemplateUsed(template: DocumentTemplate) {
+        template.lastUsedAt = System.currentTimeMillis()
+        templateManager.updateById(template.id, template)
+    }
+
+    fun markCaseUsed(documentCase: DocumentCase) {
+        documentCase.lastUsedAt = System.currentTimeMillis()
+        caseManager.updateById(documentCase.id, documentCase)
     }
 
     fun createTemplateManually() {
@@ -150,223 +174,246 @@ fun MainScreen() {
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Row(modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .background(SidebarColor)
-            ) {
-                Text(
-                    text = "Недавние документы",
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 12.dp)
-                )
+        val fullScreen = isAppFullScreen()
+        val previewWidth = CatalogPreviewWidth
+        val gridMinSize = CatalogPreviewMinSize
+        val gridHSpace = if (fullScreen) 16.dp else 10.dp
+        val gridVSpace = if (fullScreen) 18.dp else 12.dp
 
-                if (recentDocs.isEmpty()) {
-                    Text(
-                        text = "Пока нет сохранённых документов",
-                        color = Color.White.copy(alpha = 0.55f),
-                        fontSize = 13.sp,
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 20.dp, vertical = 8.dp)
-                    )
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        contentPadding = PaddingValues(bottom = 8.dp)
-                    ) {
-                        items(recentDocs, key = { "${it.path}#${System.identityHashCode(it)}" }) { document ->
-                            RecentDocumentRow(
-                                document = document,
-                                onOpenInEditor = {
-                                    Navigation.navigateTo(
-                                        Screen.TemplateInputRoute(
-                                            templateId = document.templateId,
-                                            nameForDev = document.nameForDev,
-                                            dict = document.dict
-                                        )
+        @Composable
+        fun TemplatesPane(modifier: Modifier, expanded: Boolean) {
+            Column(modifier = modifier.fillMaxWidth()) {
+                CatalogHeader(
+                    title = "Шаблоны",
+                    subtitle = "Выберите шаблон или добавьте новый",
+                    query = templateQuery,
+                    onQueryChange = { templateQuery = it },
+                    sort = templateSort,
+                    onSortChange = { templateSort = it },
+                    expanded = expanded,
+                    onToggleExpand = {
+                        expandedSection = if (expanded) null else HomeSection.Templates
+                    }
+                )
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = gridMinSize),
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(gridHSpace),
+                    verticalArrangement = Arrangement.spacedBy(gridVSpace),
+                    contentPadding = PaddingValues(bottom = 12.dp)
+                ) {
+                    item(key = "add-template") {
+                        AddTemplateCell(
+                            onClick = { showAddTemplateDialog = true },
+                            previewWidth = previewWidth,
+                            title = "Добавить шаблон",
+                            caption = "Новый шаблон"
+                        )
+                    }
+                    items(visibleTemplates, key = { "${it.id}#${System.identityHashCode(it)}" }) { template ->
+                        TemplatePreviewCard(
+                            template = template,
+                            previewWidth = previewWidth,
+                            onOpen = {
+                                markTemplateUsed(template)
+                                Navigation.navigateTo(
+                                    Screen.TemplateInputRoute(
+                                        templateId = template.id,
+                                        nameForDev = template.nameForDevelop
                                     )
-                                },
-                                onOpenInExplorer = {
-                                    val file = File(document.path)
-                                    if (Desktop.isDesktopSupported() && file.exists()) {
-                                        Desktop.getDesktop().open(file.parentFile)
-                                    } else {
-                                        scope.launch {
-                                            snackbarHostState.showSnackbar(
-                                                "Файл не найден или проводник недоступен"
-                                            )
-                                        }
+                                )
+                            },
+                            onShare = {
+                                saveViewModel.showSaveTemplatePackageDialog(
+                                    defaultFileName = template.nameForUser.ifBlank { template.nameForDevelop },
+                                    onFileSelected = { dest ->
+                                        TemplatePortable.exportTemplate(template, dest)
+                                            .onSuccess { file ->
+                                                scope.launch {
+                                                    snackbarHostState.showSnackbar(
+                                                        "Файл сохранён: ${file.name}"
+                                                    )
+                                                }
+                                            }
+                                            .onFailure { error ->
+                                                scope.launch {
+                                                    snackbarHostState.showSnackbar(
+                                                        error.message ?: "Не удалось экспортировать шаблон"
+                                                    )
+                                                }
+                                            }
                                     }
-                                },
-                                onDelete = {
-                                    recentManager.deleteDocument(document.path)
-                                    recentDocs.remove(document)
-                                }
-                            )
-                        }
+                                )
+                            },
+                            onDelete = {
+                                File(templateFolder, "${template.nameForDevelop}.docx").delete()
+                                templateManager.deleteDocument(id = template.id)
+                                templates.remove(template)
+                            }
+                        )
                     }
                 }
+            }
+        }
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { Navigation.navigateTo(Screen.SettingsScreenRoute) }
-                        .padding(horizontal = 16.dp, vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+        @Composable
+        fun CasesPane(modifier: Modifier, expanded: Boolean) {
+            Column(modifier = modifier.fillMaxWidth()) {
+                CatalogHeader(
+                    title = "Дела",
+                    subtitle = "Объедините шаблоны и заполните общие данные один раз",
+                    query = caseQuery,
+                    onQueryChange = { caseQuery = it },
+                    sort = caseSort,
+                    onSortChange = { caseSort = it },
+                    expanded = expanded,
+                    onToggleExpand = {
+                        expandedSection = if (expanded) null else HomeSection.Cases
+                    }
+                )
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = gridMinSize),
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(gridHSpace),
+                    verticalArrangement = Arrangement.spacedBy(gridVSpace),
+                    contentPadding = PaddingValues(bottom = 12.dp)
                 ) {
-                    Icon(
-                        imageVector = AppIcons.SettingsImage,
-                        contentDescription = "Настройки",
-                        tint = Color.White,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text("Настройки", color = Color.White, fontSize = 15.sp)
+                    item(key = "add-case") {
+                        AddTemplateCell(
+                            onClick = { Navigation.navigateTo(Screen.CaseScreenRoute()) },
+                            previewWidth = previewWidth,
+                            title = "Добавить дело",
+                            caption = "Новое дело"
+                        )
+                    }
+                    items(visibleCases, key = { "${it.id}#${System.identityHashCode(it)}" }) { documentCase ->
+                        CasePreviewCard(
+                            documentCase = documentCase,
+                            previewWidth = previewWidth,
+                            onOpen = {
+                                markCaseUsed(documentCase)
+                                Navigation.navigateTo(Screen.CaseScreenRoute(documentCase.id))
+                            },
+                            onDelete = {
+                                caseManager.deleteDocument(id = documentCase.id)
+                                cases.remove(documentCase)
+                            }
+                        )
+                    }
                 }
             }
+        }
 
+        if (expandedSection != null) {
             Column(
                 modifier = Modifier
-                    .weight(3f)
-                    .fillMaxHeight()
+                    .fillMaxSize()
                     .background(MainBackground)
                     .padding(horizontal = 28.dp, vertical = 24.dp)
             ) {
-                val fullScreen = isAppFullScreen()
-                val previewWidth = if (fullScreen) null else WindowedPreviewWidth
-                val gridMinSize = if (fullScreen) FullscreenPreviewMinSize else WindowedPreviewWidth
-                val gridHSpace = if (fullScreen) 20.dp else 12.dp
-                val gridVSpace = if (fullScreen) 24.dp else 14.dp
-
-                Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                when (expandedSection) {
+                    HomeSection.Templates -> TemplatesPane(Modifier.fillMaxSize(), expanded = true)
+                    HomeSection.Cases -> CasesPane(Modifier.fillMaxSize(), expanded = true)
+                    null -> Unit
+                }
+            }
+        } else {
+            Row(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .background(SidebarColor)
+                ) {
                     Text(
-                        text = "Шаблоны",
-                        fontSize = 26.sp,
+                        text = "Недавние документы",
+                        color = Color.White,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color.Black
-                    )
-                    Text(
-                        text = "Выберите шаблон или добавьте новый",
-                        fontSize = 14.sp,
-                        color = Color.Black.copy(alpha = 0.65f),
-                        modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 12.dp)
                     )
 
-                    LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = gridMinSize),
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalArrangement = Arrangement.spacedBy(gridHSpace),
-                        verticalArrangement = Arrangement.spacedBy(gridVSpace),
-                        contentPadding = PaddingValues(bottom = 12.dp)
-                    ) {
-                        item(key = "add-template") {
-                            AddTemplateCell(
-                                onClick = { showAddTemplateDialog = true },
-                                previewWidth = previewWidth,
-                                title = "Добавить шаблон",
-                                caption = "Новый шаблон"
-                            )
-                        }
-                        items(templates, key = { "${it.id}#${System.identityHashCode(it)}" }) { template ->
-                            TemplatePreviewCard(
-                                template = template,
-                                previewWidth = previewWidth,
-                                onOpen = {
-                                    Navigation.navigateTo(
-                                        Screen.TemplateInputRoute(
-                                            templateId = template.id,
-                                            nameForDev = template.nameForDevelop
+                    if (recentDocs.isEmpty()) {
+                        Text(
+                            text = "Пока нет сохранённых документов",
+                            color = Color.White.copy(alpha = 0.55f),
+                            fontSize = 13.sp,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 20.dp, vertical = 8.dp)
+                        )
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            contentPadding = PaddingValues(bottom = 8.dp)
+                        ) {
+                            items(recentDocs, key = { "${it.path}#${System.identityHashCode(it)}" }) { document ->
+                                RecentDocumentRow(
+                                    document = document,
+                                    onOpenInEditor = {
+                                        Navigation.navigateTo(
+                                            Screen.TemplateInputRoute(
+                                                templateId = document.templateId,
+                                                nameForDev = document.nameForDev,
+                                                dict = document.dict
+                                            )
                                         )
-                                    )
-                                },
-                                onShare = {
-                                    saveViewModel.showSaveTemplatePackageDialog(
-                                        defaultFileName = template.nameForUser.ifBlank { template.nameForDevelop },
-                                        onFileSelected = { dest ->
-                                            TemplatePortable.exportTemplate(template, dest)
-                                                .onSuccess { file ->
-                                                    scope.launch {
-                                                        snackbarHostState.showSnackbar(
-                                                            "Файл сохранён: ${file.name}"
-                                                        )
-                                                    }
-                                                }
-                                                .onFailure { error ->
-                                                    scope.launch {
-                                                        snackbarHostState.showSnackbar(
-                                                            error.message ?: "Не удалось экспортировать шаблон"
-                                                        )
-                                                    }
-                                                }
+                                    },
+                                    onOpenInExplorer = {
+                                        val file = File(document.path)
+                                        if (Desktop.isDesktopSupported() && file.exists()) {
+                                            Desktop.getDesktop().open(file.parentFile)
+                                        } else {
+                                            scope.launch {
+                                                snackbarHostState.showSnackbar(
+                                                    "Файл не найден или проводник недоступен"
+                                                )
+                                            }
                                         }
-                                    )
-                                },
-                                onDelete = {
-                                    File(templateFolder, "${template.nameForDevelop}.docx").delete()
-                                    templateManager.deleteDocument(id = template.id)
-                                    templates.remove(template)
-                                }
-                            )
+                                    },
+                                    onDelete = {
+                                        recentManager.deleteDocument(document.path)
+                                        recentDocs.remove(document)
+                                    }
+                                )
+                            }
                         }
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { Navigation.navigateTo(Screen.SettingsScreenRoute) }
+                            .padding(horizontal = 16.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = AppIcons.SettingsImage,
+                            contentDescription = "Настройки",
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text("Настройки", color = Color.White, fontSize = 15.sp)
                     }
                 }
 
-                Box(
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 10.dp)
-                        .height(1.dp)
-                        .background(Color.Black.copy(alpha = 0.12f))
-                )
-
-                Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    Text(
-                        text = "Дела",
-                        fontSize = 26.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.Black
+                        .weight(3f)
+                        .fillMaxHeight()
+                        .background(MainBackground)
+                        .padding(horizontal = 28.dp, vertical = 24.dp)
+                ) {
+                    TemplatesPane(Modifier.weight(1f), expanded = false)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 10.dp)
+                            .height(1.dp)
+                            .background(Color.Black.copy(alpha = 0.12f))
                     )
-                    Text(
-                        text = "Объедините шаблоны и заполните общие данные один раз",
-                        fontSize = 14.sp,
-                        color = Color.Black.copy(alpha = 0.65f),
-                        modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
-                    )
-
-                    LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = gridMinSize),
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalArrangement = Arrangement.spacedBy(gridHSpace),
-                        verticalArrangement = Arrangement.spacedBy(gridVSpace),
-                        contentPadding = PaddingValues(bottom = 12.dp)
-                    ) {
-                        item(key = "add-case") {
-                            AddTemplateCell(
-                                onClick = { Navigation.navigateTo(Screen.CaseScreenRoute()) },
-                                previewWidth = previewWidth,
-                                title = "Добавить дело",
-                                caption = "Новое дело"
-                            )
-                        }
-                        items(cases, key = { "${it.id}#${System.identityHashCode(it)}" }) { documentCase ->
-                            CasePreviewCard(
-                                documentCase = documentCase,
-                                previewWidth = previewWidth,
-                                onOpen = {
-                                    Navigation.navigateTo(Screen.CaseScreenRoute(documentCase.id))
-                                },
-                                onDelete = {
-                                    caseManager.deleteDocument(id = documentCase.id)
-                                    cases.remove(documentCase)
-                                }
-                            )
-                        }
-                    }
+                    CasesPane(Modifier.weight(1f), expanded = false)
                 }
             }
         }
@@ -507,7 +554,11 @@ private fun AddTemplateCell(
                 text = title,
                 color = Color(0xFF555555),
                 fontSize = if (compact) 11.sp else 14.sp,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp)
             )
         }
         Spacer(modifier = Modifier.height(8.dp))
@@ -606,111 +657,4 @@ private fun CasePreviewCard(
             }
         }
     }
-}
-
-@Composable
-private fun TemplatePreviewCard(
-    template: DocumentTemplate,
-    previewWidth: Dp?,
-    onOpen: () -> Unit,
-    onShare: () -> Unit,
-    onDelete: () -> Unit
-) {
-    var preview by remember(template.nameForDevelop) { mutableStateOf("") }
-    var menuExpanded by remember { mutableStateOf(false) }
-
-    LaunchedEffect(template.nameForDevelop) {
-        preview = withContext(Dispatchers.IO) {
-            loadTemplatePreview(template.nameForDevelop)
-        }
-    }
-
-    val cardWidthModifier =
-        if (previewWidth != null) Modifier.width(previewWidth) else Modifier.fillMaxWidth()
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Box(
-            modifier = cardWidthModifier
-                .aspectRatio(0.72f)
-                .shadow(3.dp, RoundedCornerShape(4.dp))
-                .clip(RoundedCornerShape(4.dp))
-                .background(Color.White)
-                .border(1.dp, CardBorder, RoundedCornerShape(4.dp))
-                .clickable(onClick = onOpen)
-        ) {
-            Text(
-                text = preview.ifBlank { template.nameForUser },
-                fontSize = if (previewWidth != null) 7.sp else 8.sp,
-                lineHeight = if (previewWidth != null) 9.sp else 11.sp,
-                color = Color(0xFF4A4A4A),
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(if (previewWidth != null) 6.dp else 10.dp)
-            )
-        }
-        Row(
-            modifier = cardWidthModifier.padding(top = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = template.nameForUser,
-                fontSize = 13.sp,
-                color = Color.Black,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-            Box {
-                Text(
-                    text = "⋮",
-                    fontSize = 16.sp,
-                    color = Color.Black.copy(alpha = 0.7f),
-                    modifier = Modifier
-                        .clickable { menuExpanded = true }
-                        .padding(start = 4.dp)
-                )
-                DropdownMenu(
-                    expanded = menuExpanded,
-                    onDismissRequest = { menuExpanded = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Поделиться") },
-                        onClick = {
-                            menuExpanded = false
-                            onShare()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Удалить") },
-                        onClick = {
-                            menuExpanded = false
-                            onDelete()
-                        }
-                    )
-                }
-            }
-        }
-    }
-}
-
-private fun loadTemplatePreview(nameForDevelop: String): String {
-    val file = File(System.getProperty("user.home"), "DocumentEditor/Templates/$nameForDevelop.docx")
-    if (!file.exists()) return ""
-    return runCatching {
-        FileInputStream(file).use { stream ->
-            XWPFDocument(stream).use { document ->
-                buildString {
-                    for (paragraph in document.paragraphs) {
-                        val text = paragraph.text.trim()
-                        if (text.isEmpty()) continue
-                        if (isNotEmpty()) append('\n')
-                        append(text)
-                        if (length > 320) break
-                    }
-                }.take(320)
-            }
-        }
-    }.getOrDefault("")
 }

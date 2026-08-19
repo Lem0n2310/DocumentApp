@@ -24,7 +24,6 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import org.apache.poi.xwpf.usermodel.*
 import org.example.documenteditordesktop.ClassesViewModels.AppIcons
 import org.example.documenteditordesktop.ClassesViewModels.Navigation
 import org.example.documenteditordesktop.ClassesViewModels.Screen
@@ -36,23 +35,6 @@ import org.example.documenteditordesktop.functions.replaceSpacesWithUnderscores
 import org.example.documenteditordesktop.functions.transliterateRussian
 import java.io.File
 import kotlin.collections.set
-
-sealed class TemplateElement {
-    data class TextBlock(
-        val id: Int,
-        var text: String,
-    ) : TemplateElement()
-
-    data class Table(
-        val id: Int,
-        val rows: List<List<String>>
-    ) : TemplateElement()
-}
-
-data class TemplateState(
-    val elements: MutableList<TemplateElement>,
-    var nameForUser: String = "",
-)
 
 /** Диапазон подсветки внутри текстового блока / ячейки */
 private data class HighlightRange(
@@ -104,7 +86,7 @@ private val FIELD_COLORS: List<Color> = buildList {
     }
 }
 
-private fun colorForFieldIndex(index: Int): Color =
+fun colorForFieldIndex(index: Int): Color =
     FIELD_COLORS[index.mod(FIELD_COLORS.size)]
 
 /** Нормализация текста вопроса для привязки цвета */
@@ -268,46 +250,6 @@ private fun isRangeTaken(
         if (check(fragments)) return true
     }
     return check(inProgressFragments)
-}
-
-/** Текст ячейки с сохранением абзацев (как joinToString("\n")). */
-private fun cellTextWithParagraphs(cell: XWPFTableCell): String =
-    cell.paragraphs.joinToString("\n") { it.text ?: "" }
-
-// Парсер DOCX файла.
-// Абзацы внутри TextBlock склеиваются через '\n', чтобы в редакторе
-// сохранялось деление на параграфы; та же схема используется в applyTemplateChangesByIndex.
-private fun parseDocxFile(file: File): TemplateState {
-    val doc = XWPFDocument(file.inputStream())
-    val elements = mutableListOf<TemplateElement>()
-    var idCounter = 0
-    val paragraphBuffer = mutableListOf<String>()
-
-    fun flushTextBlock() {
-        if (paragraphBuffer.isEmpty()) return
-        val text = paragraphBuffer.joinToString("\n")
-        elements.add(TemplateElement.TextBlock(id = idCounter++, text = text))
-        paragraphBuffer.clear()
-    }
-
-    doc.bodyElements.forEach { element ->
-        when (element) {
-            is XWPFParagraph -> {
-                paragraphBuffer.add(element.text ?: "")
-            }
-
-            is XWPFTable -> {
-                flushTextBlock()
-                val rows = element.rows.map { row ->
-                    row.tableCells.map { cell -> cellTextWithParagraphs(cell) }
-                }
-                elements.add(TemplateElement.Table(id = idCounter++, rows = rows))
-            }
-        }
-    }
-    flushTextBlock()
-
-    return TemplateState(elements = elements)
 }
 
 @Composable
@@ -960,12 +902,15 @@ fun TemplateEditorScreen(file: File) {
                                 existingTemplates.removeIf { it.id == existingWithSameDevName.id }
                             }
 
+                            val now = System.currentTimeMillis()
                             manager.addDocument(
                                 DocumentTemplate(
                                     id = id,
                                     nameForUser = nameForUser,
                                     nameForDevelop = nameForDev,
-                                    fields = docFields
+                                    fields = docFields,
+                                    createdAt = existingWithSameDevName?.createdAt?.takeIf { it > 0L } ?: now,
+                                    lastUsedAt = now
                                 )
                             )
 

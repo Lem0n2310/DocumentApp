@@ -1,11 +1,11 @@
 package org.example.documenteditordesktop.ComposeFun
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,14 +13,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -45,7 +46,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.documenteditor.ClassesViewModels.SaveViewModel
@@ -65,7 +65,6 @@ import org.example.documenteditordesktop.functions.valueForField
 
 private val Background = Color(0xff9DA7E8)
 private val BarColor = Color(0xff8192fe)
-private val CardBorder = Color(0xff8192fe)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -102,6 +101,10 @@ fun CaseScreen(caseId: Int?) {
         }
     }
     var persistedId by remember { mutableStateOf(caseId) }
+    var createdAt by remember { mutableStateOf(existing?.createdAt?.takeIf { it > 0L } ?: 0L) }
+    var lastUsedAt by remember { mutableStateOf(existing?.lastUsedAt ?: 0L) }
+    var templateQuery by remember { mutableStateOf("") }
+    var templateSort by remember { mutableStateOf(ListSort.Used) }
     var showQuestionDialog by remember { mutableStateOf(false) }
     var editingQuestionIndex by remember { mutableStateOf<Int?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -110,6 +113,11 @@ fun CaseScreen(caseId: Int?) {
 
     fun persist(): DocumentCase {
         val id = persistedId ?: ((caseManager.documents.maxOfOrNull { it.id } ?: -1) + 1)
+        val now = System.currentTimeMillis()
+        if (createdAt == 0L) {
+            createdAt = now
+            lastUsedAt = now
+        }
         val case = DocumentCase(
             id = id,
             name = name.ifBlank { "Дело ${id + 1}" },
@@ -119,7 +127,9 @@ fun CaseScreen(caseId: Int?) {
             }.toMutableList(),
             filledTemplates = filledTemplates.map {
                 TemplateAnswers(it.templateId, it.values.toMutableMap())
-            }.toMutableList()
+            }.toMutableList(),
+            createdAt = createdAt,
+            lastUsedAt = lastUsedAt
         )
         caseManager.updateById(id, case)
         persistedId = id
@@ -138,6 +148,20 @@ fun CaseScreen(caseId: Int?) {
             persist()
         }
     }
+
+    val visibleTemplates = templates.searchAndSort(
+        query = templateQuery,
+        sort = templateSort,
+        nameOf = { it.nameForUser },
+        createdAt = { it.createdAt },
+        lastUsedAt = { it.lastUsedAt },
+        idOf = { it.id }
+    )
+    val fullScreen = isAppFullScreen()
+    val previewWidth = CatalogPreviewWidth
+    val gridMinSize = CatalogPreviewMinSize
+    val gridHSpace = if (fullScreen) 16.dp else 10.dp
+    val gridVSpace = if (fullScreen) 18.dp else 12.dp
 
     fun openTemplate(template: DocumentTemplate) {
         val case = persist()
@@ -185,78 +209,93 @@ fun CaseScreen(caseId: Int?) {
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Background)) {
-        Column(
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = gridMinSize),
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = 64.dp)
+                .padding(top = 64.dp),
+            horizontalArrangement = Arrangement.spacedBy(gridHSpace),
+            verticalArrangement = Arrangement.spacedBy(gridVSpace),
+            contentPadding = PaddingValues(horizontal = 28.dp, vertical = 16.dp)
         ) {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 28.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                item {
-                    TextField(
-                        value = name,
-                        onValueChange = { name = it },
-                        label = { Text("Название дела") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                item {
+            item(key = "case-name", span = { GridItemSpan(maxLineSpan) }) {
+                TextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Название дела") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            item(key = "templates-header", span = { GridItemSpan(maxLineSpan) }) {
+                CatalogHeader(
+                    title = "Шаблоны",
+                    subtitle = "Отметьте документы, которые войдут в дело",
+                    query = templateQuery,
+                    onQueryChange = { templateQuery = it },
+                    sort = templateSort,
+                    onSortChange = { templateSort = it }
+                )
+            }
+            if (templates.isEmpty()) {
+                item(key = "templates-empty", span = { GridItemSpan(maxLineSpan) }) {
                     Text(
-                        text = "Шаблоны",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(top = 8.dp)
+                        text = "Сначала добавьте шаблоны на главном экране",
+                        color = Color.Black.copy(alpha = 0.6f)
                     )
+                }
+            } else if (visibleTemplates.isEmpty()) {
+                item(key = "templates-none", span = { GridItemSpan(maxLineSpan) }) {
                     Text(
-                        text = "Отметьте документы, которые войдут в дело",
-                        fontSize = 13.sp,
-                        color = Color.Black.copy(alpha = 0.65f),
-                        modifier = Modifier.padding(top = 2.dp, bottom = 4.dp)
+                        text = "Ничего не найдено",
+                        color = Color.Black.copy(alpha = 0.6f)
                     )
                 }
-                if (templates.isEmpty()) {
-                    item {
-                        Text(
-                            text = "Сначала добавьте шаблоны на главном экране",
-                            color = Color.Black.copy(alpha = 0.6f)
-                        )
+            } else {
+                items(
+                    visibleTemplates,
+                    key = { "${it.id}#${System.identityHashCode(it)}" }
+                ) { template ->
+                    val selected = template.id in selectedIds
+                    val answers = answersFor(template)
+                    val filled = selected && isTemplateFullyFilled(template, answers)
+                    val filledCount = template.fields.count {
+                        valueForField(it, answers)?.isNotBlank() == true
                     }
-                } else {
-                    items(templates, key = { "${it.id}#${System.identityHashCode(it)}" }) { template ->
-                        val selected = template.id in selectedIds
-                        val answers = answersFor(template)
-                        val filled = selected && isTemplateFullyFilled(template, answers)
-                        val filledCount = template.fields.count { valueForField(it, answers)?.isNotBlank() == true }
-                        TemplateSelectRow(
-                            template = template,
-                            selected = selected,
-                            filled = filled,
-                            statusText = if (!selected) {
-                                "${template.fields.size} полей"
-                            } else if (filled) {
-                                "Заполнен"
-                            } else {
-                                "Заполнено $filledCount из ${template.fields.size}"
-                            },
-                            onToggle = {
-                                if (selected) selectedIds.remove(template.id)
-                                else selectedIds.add(template.id)
-                                persistIfNeeded()
-                            },
-                            onFill = { openTemplate(template) }
-                        )
-                    }
+                    TemplatePreviewCard(
+                        template = template,
+                        previewWidth = previewWidth,
+                        selected = selected,
+                        statusText = if (!selected) {
+                            "${template.fields.size} полей"
+                        } else if (filled) {
+                            "Заполнен"
+                        } else {
+                            "Заполнено $filledCount из ${template.fields.size}"
+                        },
+                        statusFilled = filled,
+                        actionLabel = if (selected) {
+                            if (filled) "Изменить" else "Заполнить"
+                        } else {
+                            null
+                        },
+                        onAction = if (selected) {
+                            { openTemplate(template) }
+                        } else {
+                            null
+                        },
+                        onOpen = {
+                            if (selected) selectedIds.remove(template.id)
+                            else selectedIds.add(template.id)
+                            persistIfNeeded()
+                        }
+                    )
                 }
-                item {
+            }
+            item(key = "questions-header", span = { GridItemSpan(maxLineSpan) }) {
+                Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 12.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
@@ -281,30 +320,36 @@ fun CaseScreen(caseId: Int?) {
                         modifier = Modifier.padding(top = 2.dp, bottom = 4.dp)
                     )
                 }
-                if (typicalQuestions.isEmpty()) {
-                    item {
-                        Text(
-                            text = "Пока нет типовых вопросов",
-                            color = Color.Black.copy(alpha = 0.6f)
-                        )
-                    }
-                } else {
-                    items(typicalQuestions.size) { index ->
-                        val item = typicalQuestions[index]
-                        TypicalQuestionCard(
-                            question = item,
-                            onEdit = {
-                                editingQuestionIndex = index
-                                showQuestionDialog = true
-                            },
-                            onDelete = {
-                                typicalQuestions.removeAt(index)
-                                persistIfNeeded()
-                            }
-                        )
-                    }
+            }
+            if (typicalQuestions.isEmpty()) {
+                item(key = "questions-empty", span = { GridItemSpan(maxLineSpan) }) {
+                    Text(
+                        text = "Пока нет типовых вопросов",
+                        color = Color.Black.copy(alpha = 0.6f)
+                    )
                 }
-                item { Spacer(modifier = Modifier.height(24.dp)) }
+            } else {
+                items(
+                    count = typicalQuestions.size,
+                    key = { index -> "q-$index" },
+                    span = { GridItemSpan(maxLineSpan) }
+                ) { index ->
+                    val item = typicalQuestions[index]
+                    TypicalQuestionCard(
+                        question = item,
+                        onEdit = {
+                            editingQuestionIndex = index
+                            showQuestionDialog = true
+                        },
+                        onDelete = {
+                            typicalQuestions.removeAt(index)
+                            persistIfNeeded()
+                        }
+                    )
+                }
+            }
+            item(key = "bottom-spacer", span = { GridItemSpan(maxLineSpan) }) {
+                Spacer(modifier = Modifier.height(24.dp))
             }
         }
 
@@ -380,47 +425,6 @@ fun CaseScreen(caseId: Int?) {
                 }
             }
         )
-    }
-}
-
-@Composable
-private fun TemplateSelectRow(
-    template: DocumentTemplate,
-    selected: Boolean,
-    filled: Boolean,
-    statusText: String,
-    onToggle: () -> Unit,
-    onFill: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color.White)
-            .border(1.dp, if (selected) CardBorder else Color.White, RoundedCornerShape(8.dp))
-            .clickable(onClick = onToggle)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Checkbox(checked = selected, onCheckedChange = { onToggle() })
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = template.nameForUser,
-                fontSize = 15.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = statusText,
-                fontSize = 12.sp,
-                color = if (filled) Color(0xFF2E7D32) else Color.Black.copy(alpha = 0.55f)
-            )
-        }
-        if (selected) {
-            TextButton(onClick = onFill) {
-                Text(if (filled) "Изменить" else "Заполнить")
-            }
-        }
     }
 }
 

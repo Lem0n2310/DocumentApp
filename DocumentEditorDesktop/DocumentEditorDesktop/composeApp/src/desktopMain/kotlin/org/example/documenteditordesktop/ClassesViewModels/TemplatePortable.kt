@@ -85,11 +85,14 @@ object TemplatePortable {
         val targetDocx = File(templateFolder, "$uniqueDevName.docx")
         targetDocx.writeBytes(bytes)
 
+        val now = System.currentTimeMillis()
         val saved = DocumentTemplate(
             id = newId,
             nameForUser = imported.nameForUser.ifBlank { uniqueDevName },
             nameForDevelop = uniqueDevName,
-            fields = imported.fields
+            fields = imported.fields,
+            createdAt = imported.createdAt.takeIf { it > 0L } ?: now,
+            lastUsedAt = now
         )
         manager.addDocument(saved)
         saved
