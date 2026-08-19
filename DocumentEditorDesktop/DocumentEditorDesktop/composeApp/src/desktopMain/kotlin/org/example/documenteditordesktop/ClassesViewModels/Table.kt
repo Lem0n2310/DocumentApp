@@ -41,7 +41,9 @@ data class DocumentTemplate(
     var id: Int, // Номер шаблона
     var nameForUser: String, // Имя шаблона
     var nameForDevelop: String,
-    var fields: List<DocumentField> // Поля шаблона
+    var fields: List<DocumentField>, // Поля шаблона
+    var createdAt: Long = 0L,
+    var lastUsedAt: Long = 0L
 ) {
     constructor() : this(
         id = 0,
@@ -73,7 +75,9 @@ data class DocumentCase(
     var name: String = "",
     var templateIds: MutableList<Int> = mutableListOf(),
     var typicalQuestions: MutableList<TypicalQuestion> = mutableListOf(),
-    var filledTemplates: MutableList<TemplateAnswers> = mutableListOf()
+    var filledTemplates: MutableList<TemplateAnswers> = mutableListOf(),
+    var createdAt: Long = 0L,
+    var lastUsedAt: Long = 0L
 ) {
     constructor() : this(0, "", mutableListOf(), mutableListOf(), mutableListOf())
 }
