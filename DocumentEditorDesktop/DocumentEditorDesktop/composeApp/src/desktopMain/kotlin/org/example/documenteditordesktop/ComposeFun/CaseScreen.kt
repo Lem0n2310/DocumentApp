@@ -59,6 +59,7 @@ import org.example.documenteditordesktop.ClassesViewModels.Screen
 import org.example.documenteditordesktop.ClassesViewModels.TemplateAnswers
 import org.example.documenteditordesktop.ClassesViewModels.TypicalQuestion
 import org.example.documenteditordesktop.functions.countMatchedFields
+import org.example.documenteditordesktop.functions.duplicateCase
 import org.example.documenteditordesktop.functions.isTemplateFullyFilled
 import org.example.documenteditordesktop.functions.mergedAnswers
 import org.example.documenteditordesktop.functions.valueForField
@@ -376,6 +377,16 @@ fun CaseScreen(caseId: Int?) {
             }
         },
         actions = {
+            if (persistedId != null) {
+                TextButton(
+                    onClick = {
+                        val copy = duplicateCase(persist(), caseManager)
+                        Navigation.navigateTo(Screen.CaseScreenRoute(copy.id))
+                    }
+                ) {
+                    Text("Дублировать", color = Color.White)
+                }
+            }
             TextButton(onClick = { saveCaseDocuments() }) {
                 Text("Сохранить дело", color = Color.White)
             }

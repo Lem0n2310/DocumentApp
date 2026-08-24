@@ -68,6 +68,7 @@ import org.example.documenteditordesktop.ComposeFun.TemplatePreviewCard
 import org.example.documenteditordesktop.ComposeFun.isAppFullScreen
 import org.example.documenteditordesktop.ComposeFun.searchAndSort
 import org.example.documenteditordesktop.functions.convertDocToDocx
+import org.example.documenteditordesktop.functions.duplicateCase
 import java.awt.Desktop
 import java.io.File
 
@@ -293,6 +294,11 @@ fun MainScreen() {
                             onOpen = {
                                 markCaseUsed(documentCase)
                                 Navigation.navigateTo(Screen.CaseScreenRoute(documentCase.id))
+                            },
+                            onDuplicate = {
+                                val copy = duplicateCase(documentCase, caseManager)
+                                cases.add(copy)
+                                Navigation.navigateTo(Screen.CaseScreenRoute(copy.id))
                             },
                             onDelete = {
                                 caseManager.deleteDocument(id = documentCase.id)
@@ -577,6 +583,7 @@ private fun CasePreviewCard(
     documentCase: DocumentCase,
     previewWidth: Dp?,
     onOpen: () -> Unit,
+    onDuplicate: () -> Unit,
     onDelete: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -646,6 +653,13 @@ private fun CasePreviewCard(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false }
                 ) {
+                    DropdownMenuItem(
+                        text = { Text("Дублировать") },
+                        onClick = {
+                            menuExpanded = false
+                            onDuplicate()
+                        }
+                    )
                     DropdownMenuItem(
                         text = { Text("Удалить") },
                         onClick = {

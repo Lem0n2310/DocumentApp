@@ -180,3 +180,40 @@ fun saveAnswersToCase(caseId: Int, templateId: Int, values: Map<String, String>)
     }
     manager.updateById(caseId, documentCase)
 }
+
+fun duplicateCase(source: DocumentCase, caseManager: Manager<DocumentCase>): DocumentCase {
+    val newId = (caseManager.documents.maxOfOrNull { it.id } ?: -1) + 1
+    val now = System.currentTimeMillis()
+    val copy = DocumentCase(
+        id = newId,
+        name = uniqueCaseCopyName(source.name, caseManager.documents.map { it.name }),
+        templateIds = source.templateIds.toMutableList(),
+        typicalQuestions = source.typicalQuestions.map { typical ->
+            TypicalQuestion(
+                questions = typical.questions.toMutableList(),
+                answer = ""
+            )
+        }.toMutableList(),
+        filledTemplates = mutableListOf(),
+        createdAt = now,
+        lastUsedAt = now
+    )
+    caseManager.updateById(newId, copy)
+    return copy
+}
+
+private fun uniqueCaseCopyName(original: String, existingNames: List<String>): String {
+    val base = original
+        .ifBlank { "Дело" }
+        .replace(Regex(" \\(копия(?: \\d+)?\\)$"), "")
+        .trim()
+        .ifBlank { "Дело" }
+    val names = existingNames.toHashSet()
+    val first = "$base (копия)"
+    if (first !in names) return first
+    var index = 2
+    while ("$base (копия $index)" in names) {
+        index++
+    }
+    return "$base (копия $index)"
+}
